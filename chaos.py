@@ -28,6 +28,7 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
     niter = nsteps//nsteps_per_pullback
     if int(nsteps / nsteps_per_pullback) != niter:
         raise ValueError("BORKED")
+    ndim = q0.shape[1]
 
     # define an offset vector to start the offset orbit on
     dq = np.random.uniform(-1,1,size=(q0.shape))
@@ -36,6 +37,11 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
 
     q_offset = q0 + dq
     p_offset = p0 + dp
+
+    full_q = np.zeros((nsteps,ndim))
+    full_p = np.zeros((nsteps,ndim))
+    full_q[0] = q0
+    full_p[0] = p0
 
     q_init = np.vstack((q0,q_offset))
     p_init = np.vstack((p0,p_offset))
@@ -52,6 +58,9 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
 
         main_q = qq[-1,0]
         main_p = pp[-1,0]
+        
+        full_q[(i-1)*nsteps_per_pullback+1:ii+1] = qq[1:,0]
+        full_p[(i-1)*nsteps_per_pullback+1:ii+1] = pp[1:,0]
 
         q_offset = qq[-1,1]
         p_offset = pp[-1,1]
@@ -65,8 +74,8 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
         ts[i-1] = time
 
         if d1_mag > 0:
-            q_offset = main_q + d0 * d1[:3] / d1_mag
-            p_offset = main_p + d0 * d1[3:] / d1_mag
+            q_offset = main_q + d0 * d1[:ndim] / d1_mag
+            p_offset = main_p + d0 * d1[ndim:] / d1_mag
         else:
             q_offset = main_q
             p_offset = main_p
@@ -75,7 +84,7 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
         p_init = np.vstack((main_p,p_offset))
 
     LEs = np.array([LEs[:ii].sum()/ts[ii-1] for ii in range(1,niter)])
-    return LEs
+    return LEs, full_q, full_p
 
 def pendulum():
     # Just a test of the Lyapunov exponent calculation
@@ -150,7 +159,7 @@ def pendulum():
 
 def point_mass():
     dt = 0.01
-    nsteps = 100000
+    nsteps = 10000
 
     usys = [u.au, u.M_sun, u.yr]
     X = 1.
@@ -167,14 +176,18 @@ def point_mass():
                                    r_0=[0.,0.,0.]*u.au)
     integrator = LeapfrogIntegrator(potential._acceleration_at)
 
-    LE = lyapunov(x0, v0, integrator,
-                  dt=dt, nsteps=nsteps,
-                  d0=1E-8, nsteps_per_pullback=1)
+    LE, q, p = lyapunov(x0, v0, integrator,
+                        dt=dt, nsteps=nsteps,
+                        d0=1E-8, nsteps_per_pullback=1)
 
     print("Lyapunov exponent computed")
     plt.clf()
     plt.semilogy(LE, marker=None)
     plt.savefig("pt_mass_le.png")
+
+    plt.clf()
+    plt.plot(q[...,0],q[...,1],marker=None)
+    plt.savefig("pt_mass_orbit.png")
 
 def zotos_potential(r, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
     x,y,z = r.T
@@ -205,7 +218,7 @@ def zotos(orbit_type):
     from astropy.constants import G
     G = G.decompose(usys).value
 
-    dt = 0.05
+    dt = 0.01
     nsteps = 1000000
     print(nsteps*dt*u.Myr)
 
@@ -240,7 +253,7 @@ def zotos(orbit_type):
 
     # chaos!
     elif orbit_type == "chaos":
-        x0 = np.array([[0.,10.,0.]])
+        x0 = np.array([[10.,0.,0.]])
         vx = (180*u.km/u.s).decompose(usys).value
 
     else:
@@ -255,14 +268,18 @@ def zotos(orbit_type):
     v0 = np.array([[vx,0.,vz]])
 
     integrator = LeapfrogIntegrator(zotos_acceleration, func_args=params)
-    LE = lyapunov(x0, v0, integrator,
-                  dt=dt, nsteps=nsteps,
-                  d0=1E-5, nsteps_per_pullback=1)
+    LE,q,p = lyapunov(x0, v0, integrator,
+                      dt=dt, nsteps=nsteps,
+                      d0=1E-5, nsteps_per_pullback=1)
 
     print("Lyapunov exponent computed")
     plt.clf()
     plt.semilogy(LE, marker=None)
     plt.savefig('zotos_le_{}.png'.format(orbit_type))
+
+    plt.clf()
+    plt.plot(np.sqrt(q[:,0]**2+q[:,1]**2), q[:,2], marker=None)
+    plt.savefig('zotos_orbit_{}.png'.format(orbit_type))
 
 def zotos_ball(orbit_type):
     from streams import usys
