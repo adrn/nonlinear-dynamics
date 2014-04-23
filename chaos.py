@@ -58,7 +58,7 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
 
         main_q = qq[-1,0]
         main_p = pp[-1,0]
-        
+
         full_q[(i-1)*nsteps_per_pullback+1:ii+1] = qq[1:,0]
         full_p[(i-1)*nsteps_per_pullback+1:ii+1] = pp[1:,0]
 
@@ -380,6 +380,39 @@ def zotos_ball(orbit_type):
         plt.savefig(os.path.join(orbit_type, 'XZ_zotos_ball_{:05d}.png'.format(ii)))
 
         ii += 1
+
+def pal5():
+    dt = 0.01
+    nsteps = 1000000
+    print(nsteps*dt*u.Myr)
+
+    from streams import usys
+    X = 8.312877511
+    Y = 0.242593717
+    Z = 16.811943627
+    x0 = np.array([[X,Y,Z]])
+
+    Vx = (-52.429087*u.km/u.s).decompose(usys).value
+    Vy = (-96.697363*u.km/u.s).decompose(usys).value
+    Vz = (-8.156130*u.km/u.s).decompose(usys).value
+    v0 = np.array([[Vx,Vy,Vz]])
+
+    acc = np.zeros((1,3))
+    potential = LawMajewski2010()
+
+    integrator = LeapfrogIntegrator(zotos_acceleration, func_args=params)
+    LE,q,p = lyapunov(x0, v0, integrator,
+                      dt=dt, nsteps=nsteps,
+                      d0=1E-5, nsteps_per_pullback=1)
+
+    print("Lyapunov exponent computed")
+    plt.clf()
+    plt.semilogy(LE, marker=None)
+    plt.savefig('pal5_le_{}.png'.format(orbit_type))
+
+    plt.clf()
+    plt.plot(np.sqrt(q[:,0]**2+q[:,1]**2), q[:,2], marker=None)
+    plt.savefig('pal5_orbit_{}.png'.format(orbit_type))
 
 if __name__ == "__main__":
     np.random.seed(42)
