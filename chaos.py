@@ -401,7 +401,7 @@ def lm10_grid():
             r0 = np.array([[x,y,z]])
             V = potential._value_at(r0)
             vz = np.squeeze(np.sqrt(2*(E - V) - vx**2 - vy**2))
-            print(x, y, z, vx, vy, vz)
+            print(x, y, z, vx, vy, vz, V)
             v0 = np.array([[vx,vy,vz]])
             x0 = np.append(r0,v0)
 
