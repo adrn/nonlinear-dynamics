@@ -128,9 +128,8 @@ def point_mass():
     plt.plot(xs[:,0],xs[:,1],marker=None)
     plt.savefig(os.path.join(plot_path,"point_mass.png"))
 
-def zotos_potential(r, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
-    x,y,z = r.T
-    Rsq = x**2 + y**2
+def zotos_potential(R, z, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
+    Rsq = R*R
 
     Vd = -G*Md / np.sqrt(b**2 + Rsq + (alpha + np.sqrt(h**2+z**2))**2)
     Vn = -G*Mn / np.sqrt(Rsq+z**2+cn**2)
@@ -138,24 +137,22 @@ def zotos_potential(r, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
 
     return Vd + Vn + Vh
 
-def zotos_acceleration(r, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
-    x,y,z = r.T
+def zotos_acceleration(R, z, Lz, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
+    Rsq = R*R
 
-    Rsq = x**2 + y**2
     tmp1 = -G*Md/(b**2 + Rsq + (alpha + np.sqrt(h**2 + z**2))**2)**1.5
     tmp2 = -G*Mn/(cn**2 + Rsq + z**2)**1.5
     tmp3 = -v0**2/(beta*z**2 + ch**2 + Rsq)
 
-    dx = x*tmp1 + x*tmp2 + x*tmp3
-    dy = y*tmp1 + y*tmp2 + y*tmp3
+    dR = R*tmp1 + R*tmp2 + R*tmp3 + Lz**2/R**3
     dz = z*tmp1*(alpha + np.sqrt(h**2 + z**2))/np.sqrt(h**2 + z**2) + z*tmp2 + beta*z*tmp3
 
-    return np.array([dx,dy,dz]).T
+    return np.array([dR,dz]).T
 
 def zotos(orbit_type):
     from streams import usys
     from astropy.constants import G
-    G = G.decompose(usys).value
+    _G = G.decompose(usys).value
 
     # Parameter choices
     # standard prolate:
@@ -163,66 +160,70 @@ def zotos(orbit_type):
     #           5.8E9, 0.25,
     #           0.204542433, 0.5, 8.5)
     # standard oblate:
-    params = (G, 1.63E11, 3., 6., 0.2,
+    params = (_G, 1.63E11, 3., 6., 0.2,
               5.8E9, 0.25,
               0.204542433, 1.5, 8.5)
 
-    # 4:3 boxlet?
-    if orbit_type == "4-3-box":
-        r0 = np.array([2.7,0.,0.])
-        vx = (290*u.km/u.s).decompose(usys).value
+    if orbit_type == "box":
+        r0 = np.array([1.3,0.])
+        vR = 0.
 
-    # 2:1 boxlet?
-    elif orbit_type == "2-1-box":
-        r0 = np.array([6.,0.,0.])
-        vx = 0.
+    elif orbit_type == "2-1-banana":
+        r0 = np.array([6.00338292,0.])
+        vR = 0.
 
-    # 8:5 boxlet?
-    elif orbit_type == "8-5-box":
-        r0 = np.array([10.,0.,0.])
-        vx = 0.
+    elif orbit_type == "1-1-linear":
+        r0 = np.array([5.046266,0.])
+        vR = (30.92524*10*u.km/u.s).decompose(usys).value
 
-    # 3:2 boxlet?
-    elif orbit_type == "3-2-box":
-        r0 = np.array([8.1,0.,0.])
-        vx = (175*u.km/u.s).decompose(usys).value
+    elif orbit_type == "3-2-boxlet":
+        r0 = np.array([1.50953,0.])
+        vR = (20.20790*10*u.km/u.s).decompose(usys).value
 
-    # chaos!
+    elif orbit_type == "4-3-boxlet":
+        r0 = np.array([11.70795,0.])
+        vR = 0.
+
+    elif orbit_type == "8-5-boxlet":
+        r0 = np.array([9.971466,0.])
+        vR = 0.
+
+    elif orbit_type == "13-8-boxlet":
+        r0 = np.array([9.5316067,0.])
+        vR = 0.
+
     elif orbit_type == "chaos":
-        r0 = np.array([10.,0.,0.])
-        vx = (180*u.km/u.s).decompose(usys).value
+        r0 = np.array([0.18,0.])
+        vR = 0.
 
-    # chaos!
     elif orbit_type == "chaos2":
-        r0 = np.array([2.,0.,0.])
-        vx = (360.*u.km/u.s).decompose(usys).value
+        r0 = np.array([2.,0.])
+        vR = (360.*u.km/u.s).decompose(usys).value
 
     # chaos!
     elif orbit_type == "chaos3":
-        r0 = np.array([5.,0.,0.])
-        vx = (200.*u.km/u.s).decompose(usys).value
+        r0 = np.array([5.,0.])
+        vR = (200.*u.km/u.s).decompose(usys).value
 
-    else:
-        return
-
+    R,z = r0[...,:2].T
     E = (600*100*(u.km/u.s)**2).decompose(usys).value
-    V = zotos_potential(r0, *params)
+    V = zotos_potential(R, z, *params)
     Lz = (10.*10.*u.km*u.kpc/u.s).decompose(usys).value # typo in paper? km/kpc instead of km*kpc
 
-    R = np.sqrt(r0[...,0]**2 + r0[...,1]**2)
-    vz = np.squeeze(np.sqrt(2*E - 2*V - Lz**2/R**2 - vx**2))
-    v0 = np.array([vx,0.,vz])
+    vz = np.squeeze(np.sqrt(2*(E - V) - Lz**2/R**2 - vR**2))
+    v0 = np.array([vR,vz])
 
     x0 = np.append(r0,v0)
+    print(x0)
 
-    def F(t,X):
-        x,y,z,px,py,pz = X.T
-        dH_dq = zotos_acceleration(X[...,:3], *params)
-        return np.hstack((np.array([px, py, pz]).T, dH_dq))
+    def F(t,X,*params):
+        R,z,pR,pz = X.T
+        dH_dq = zotos_acceleration(R, z, Lz, *params)
+        return np.hstack((np.array([pR, pz]).T, dH_dq))
 
     integrator = DOPRI853Integrator(F, func_args=params)
-    nsteps = 100000
-    dt = 0.1
+    nsteps = 10000
+    dt = 1.
     print(nsteps*dt*u.Myr)
     nsteps_per_pullback = 10
     d0 = 1e-5
@@ -231,12 +232,15 @@ def zotos(orbit_type):
                        d0=d0, nsteps_per_pullback=nsteps_per_pullback)
 
     print("Lyapunov exponent computed")
+    plt.figure(figsize=(10,10))
     plt.clf()
     plt.semilogy(LEs, marker=None)
     plt.savefig('zotos_le_{}.png'.format(orbit_type))
 
     plt.clf()
-    plt.plot(np.sqrt(xs[:,0]**2+xs[:,1]**2), xs[:,2], marker=None)
+    plt.plot(xs[:,0], xs[:,1], marker=None)
+    plt.xlim(0,15)
+    plt.ylim(-15,15)
     plt.savefig('zotos_orbit_{}.png'.format(orbit_type))
 
 def zotos_ball(orbit_type):
@@ -417,7 +421,7 @@ def lm10_grid():
             plt.savefig('lm10_le_x{:.1f}_vx{:.3f}.png'.format(x,vx))
 
             plt.clf()
-            plt.plot(np.sqrt(xs[:,0]**2+xs[:,1]**2), xs[:,2], marker=None)
+            plt.plot(xs[:,0], xs[:,1], marker=None)
             plt.savefig('lm10_orbit_x{:.1f}_vx{:.3f}.png'.format(x,vx))
 
 
@@ -425,17 +429,22 @@ if __name__ == "__main__":
     np.random.seed(42)
     #pendulum()
     #point_mass()
-    # zotos('4-3-box')
-    # zotos('chaos')
-    # zotos('2-1-box')
-    # zotos('8-5-box')
-    # zotos('3-2-box')
+
+
+    zotos('box')
+    zotos('2-1-banana')
+    zotos('1-1-linear')
+    zotos('3-2-boxlet')
+    zotos('4-3-boxlet')
+    zotos('8-5-boxlet')
+    zotos('13-8-boxlet')
+    zotos('chaos')
     # zotos('chaos2')
     # zotos('chaos3')
 
     # pal5()
 
-    lm10_grid()
+    # lm10_grid()
 
     # zotos_ball('4-3-box')
     # zotos_ball('2-1-box')
