@@ -14,37 +14,29 @@ import logging
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-from streamteam.integrate import LeapfrogIntegrator, RK5Integrator
+from streamteam.integrate import LeapfrogIntegrator, RK5Integrator, DOPRI853Integrator
 from streams.potential import PointMassPotential, MiyamotoNagaiPotential
 from streams.potential.lm10 import LawMajewski2010
 
 plot_path = ""
 
-def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
+def lyapunov(x0, integrator, dt, nsteps, d0=1e-5, nsteps_per_pullback=10):
     """ Compute the Lyapunov exponent of an orbit from initial conditions
         (q0,p0).
     """
 
-    niter = nsteps//nsteps_per_pullback
-    if int(nsteps / nsteps_per_pullback) != niter:
-        raise ValueError("BORKED")
-    ndim = q0.shape[1]
+    niter = nsteps // nsteps_per_pullback
+    ndim = x0.size
 
     # define an offset vector to start the offset orbit on
-    dq = np.random.uniform(-1,1,size=(q0.shape))
-    dq = d0*dq/np.squeeze(np.linalg.norm(dq))
-    dp = np.zeros_like(p0)
+    d0_vec = np.zeros_like(x0)
+    d0_vec[0] = d0
 
-    q_offset = q0 + dq
-    p_offset = p0 + dp
+    x_offset = x0 + d0_vec
+    x_i = np.vstack((x0,x_offset))
 
-    full_q = np.zeros((nsteps,ndim))
-    full_p = np.zeros((nsteps,ndim))
-    full_q[0] = q0
-    full_p[0] = p0
-
-    q_init = np.vstack((q0,q_offset))
-    p_init = np.vstack((p0,p_offset))
+    full_x = np.zeros((nsteps+1,ndim))
+    full_x[0] = x0
 
     LEs = np.zeros(niter)
     ts = np.zeros_like(LEs)
@@ -52,142 +44,89 @@ def lyapunov(q0, p0, integrator, dt, nsteps, d0=1e-8, nsteps_per_pullback=10):
     for i in range(1,niter+1):
         ii = i * nsteps_per_pullback
 
-        tt,qq,pp = integrator.run(q_init, p_init,
-                                  dt=dt, nsteps=nsteps_per_pullback)
+        tt,xx = integrator.run(x_i, dt=dt, nsteps=nsteps_per_pullback)
         time += tt[-1]
 
-        main_q = qq[-1,0]
-        main_p = pp[-1,0]
-
-        full_q[(i-1)*nsteps_per_pullback+1:ii+1] = qq[1:,0]
-        full_p[(i-1)*nsteps_per_pullback+1:ii+1] = pp[1:,0]
-
-        q_offset = qq[-1,1]
-        p_offset = pp[-1,1]
-
-        d1_q = main_q - q_offset
-        d1_p = main_p - p_offset
-        d1 = np.append(d1_q,d1_p)
+        main_x = xx[-1,0]
+        d1 = xx[-1,1] - main_x
         d1_mag = np.linalg.norm(d1)
-
         LEs[i-1] = np.log(d1_mag/d0)
         ts[i-1] = time
 
-        if d1_mag > 0:
-            q_offset = main_q + d0 * d1[:ndim] / d1_mag
-            p_offset = main_p + d0 * d1[ndim:] / d1_mag
-        else:
-            q_offset = main_q
-            p_offset = main_p
+        x_offset = xx[-1,0] + d0 * d1 / d1_mag
+        x_i = np.vstack((xx[-1,0],x_offset))
 
-        q_init = np.vstack((main_q,q_offset))
-        p_init = np.vstack((main_p,p_offset))
+        full_x[(i-1)*nsteps_per_pullback+1:ii+1] = xx[1:,0]
 
     LEs = np.array([LEs[:ii].sum()/ts[ii-1] for ii in range(1,niter)])
-    return LEs, full_q, full_p
+
+    return LEs, full_x
 
 def pendulum():
     # Just a test of the Lyapunov exponent calculation
 
     # CHAOTIC
-    A = 0.07
-    omega_d = 0.75
-    q0,p0 = np.array([3.]), np.array([0.])
-    ext = "chaotic"
+    # A = 0.07
+    # omega_d = 0.75
+    # x0 = np.array([3.,0.,0.])
+    # ext = "chaotic"
 
     # REGULAR
-    # A = 0.055
-    # omega_d = 0.7
-    # q0,p0 = np.array([1.]), np.array([0.])
-    # ext = "regular"
+    A = 0.055
+    omega_d = 0.7
+    x0 = np.array([1.,0.,0.])
+    ext = "regular"
 
     def F(t,x):
-        q,p = x.T
-        return np.array([p,-np.sin(q) + A*np.cos(omega_d*t)]).T.copy()
+        q,p,z = x.T
+        arr = np.array([p, -np.sin(q) + A*np.cos(omega_d*t), p*0.]).T
+        return arr
 
-    integrator = RK5Integrator(F)
+    integrator = DOPRI853Integrator(F)
     nsteps = 100000
-    # LE = lyapunov(np.array([3.]), np.array([0.]),
-    #               integrator, dt=0.1, nsteps=nsteps,
-    #               d0=1E-8, nsteps_per_pullback=10)
+    dt = 0.1
+    nsteps_per_pullback = 10
+    d0 = 1e-5
 
-    nsteps_per_pullback = 1
-    niter = nsteps//nsteps_per_pullback
-
-    # define an offset vector to start the offset orbit on
-    d0 = 1e-3
-    q_offset = q0 + d0
-    p_offset = p0
-
-    q_init = np.vstack((q0,q_offset))
-    p_init = np.vstack((p0,p_offset))
-
-    LEs = np.zeros(niter)
-    ts = np.zeros_like(LEs)
-    time = 0.
-    for i in range(1,niter+1):
-        ii = i * nsteps_per_pullback
-
-        tt,qq,pp = integrator.run(q_init, p_init,
-                                  dt0=0.2, nsteps=nsteps_per_pullback)
-        time += tt[-1]
-
-        d1 = np.array([qq[-1,1] - qq[-1,0],
-                       pp[-1,1] - pp[-1,0]])
-        d1_mag = np.linalg.norm(d1)
-        LEs[i-1] = np.log(d1_mag/d0)
-        ts[i-1] = time
-
-        q_offset = qq[-1,0] + d0 * d1[0] / d1_mag
-        p_offset = pp[-1,0] + d0 * d1[1] / d1_mag
-
-        q_init = np.vstack((qq[-1,0],q_offset))
-        p_init = np.vstack((pp[-1,0],p_offset))
-
-    LEs = np.array([LEs[:ii].sum()/ts[ii-1] for ii in range(1,niter)])
+    LEs, xs = lyapunov(x0, integrator, dt, nsteps,
+                       d0=d0, nsteps_per_pullback=nsteps_per_pullback)
 
     print("Lyapunov exponent computed")
     plt.clf()
     plt.semilogy(LEs, marker=None)
     plt.savefig("pend_le_{}.png".format(ext))
 
-    #fig = plot(ts, qs, ps)
-    # fig,ax = plt.subplots(1,1)
-    # #ax.plot(ts,qs[:,0,0],marker=None)
-    # ax.plot(qs[:,0,0],ps[:,0,0],marker=None)
-    # fig.savefig(os.path.join(plot_path,"rk5_pend.png"))
+    plt.clf()
+    plt.plot(xs[:,0],xs[:,1],marker=None)
+    plt.savefig(os.path.join(plot_path,"pend.png"))
 
 def point_mass():
-    dt = 0.01
+    GM = (G * (1.*u.M_sun)).decompose([u.au,u.M_sun,u.year,u.radian]).value
+
+    def F(t,x):
+        x,y,px,py = x.T
+        a = -GM/(x*x+y*y)**1.5
+        return np.array([px, py, x*a, y*a]).T
+
+    x0 = np.array([1.0, 0.0, 0.0, 2*np.pi]) # Earth
+
+    integrator = DOPRI853Integrator(F)
     nsteps = 10000
+    dt = 0.01
+    nsteps_per_pullback = 10
+    d0 = 1e-5
 
-    usys = [u.au, u.M_sun, u.yr]
-    X = 1.
-    Y = 0.
-    Z = 0.
-    x0 = np.array([[X,Y,Z]])
-
-    Vx = 0.
-    Vy = 2.*np.pi
-    Vz = 0.
-    v0 = np.array([[Vx,Vy,Vz]])
-
-    potential = PointMassPotential(units=usys, m=1*u.M_sun,
-                                   r_0=[0.,0.,0.]*u.au)
-    integrator = LeapfrogIntegrator(potential._acceleration_at)
-
-    LE, q, p = lyapunov(x0, v0, integrator,
-                        dt=dt, nsteps=nsteps,
-                        d0=1E-8, nsteps_per_pullback=1)
+    LEs, xs = lyapunov(x0, integrator, dt, nsteps,
+                       d0=d0, nsteps_per_pullback=nsteps_per_pullback)
 
     print("Lyapunov exponent computed")
     plt.clf()
-    plt.semilogy(LE, marker=None)
-    plt.savefig("pt_mass_le.png")
+    plt.semilogy(LEs, marker=None)
+    plt.savefig("point_mass_le.png")
 
     plt.clf()
-    plt.plot(q[...,0],q[...,1],marker=None)
-    plt.savefig("pt_mass_orbit.png")
+    plt.plot(xs[:,0],xs[:,1],marker=None)
+    plt.savefig(os.path.join(plot_path,"point_mass.png"))
 
 def zotos_potential(r, G, Md, alpha, b, h, Mn, cn, v0, beta, ch):
     x,y,z = r.T
@@ -218,10 +157,7 @@ def zotos(orbit_type):
     from astropy.constants import G
     G = G.decompose(usys).value
 
-    dt = 0.01
-    nsteps = 1000000
-    print(nsteps*dt*u.Myr)
-
+    # Parameter choices
     # standard prolate:
     # params = (G, 1.63E11, 3., 6., 0.2,
     #           5.8E9, 0.25,
@@ -233,52 +169,74 @@ def zotos(orbit_type):
 
     # 4:3 boxlet?
     if orbit_type == "4-3-box":
-        x0 = np.array([[2.7,0.,0.]])
+        r0 = np.array([2.7,0.,0.])
         vx = (290*u.km/u.s).decompose(usys).value
 
     # 2:1 boxlet?
     elif orbit_type == "2-1-box":
-        x0 = np.array([[6.,0.,0.]])
+        r0 = np.array([6.,0.,0.])
         vx = 0.
 
     # 8:5 boxlet?
     elif orbit_type == "8-5-box":
-        x0 = np.array([[10.,0.,0.]])
+        r0 = np.array([10.,0.,0.])
         vx = 0.
 
     # 3:2 boxlet?
     elif orbit_type == "3-2-box":
-        x0 = np.array([[8.1,0.,0.]])
+        r0 = np.array([8.1,0.,0.])
         vx = (175*u.km/u.s).decompose(usys).value
 
     # chaos!
     elif orbit_type == "chaos":
-        x0 = np.array([[10.,0.,0.]])
+        r0 = np.array([10.,0.,0.])
         vx = (180*u.km/u.s).decompose(usys).value
+
+    # chaos!
+    elif orbit_type == "chaos2":
+        r0 = np.array([2.,0.,0.])
+        vx = (360.*u.km/u.s).decompose(usys).value
+
+    # chaos!
+    elif orbit_type == "chaos3":
+        r0 = np.array([5.,0.,0.])
+        vx = (200.*u.km/u.s).decompose(usys).value
 
     else:
         return
 
     E = (600*100*(u.km/u.s)**2).decompose(usys).value
-    V = zotos_potential(x0, *params)
+    V = zotos_potential(r0, *params)
     Lz = (10.*10.*u.km*u.kpc/u.s).decompose(usys).value # typo in paper? km/kpc instead of km*kpc
 
-    R = np.sqrt(x0[...,0]**2 + x0[...,1]**2)
+    R = np.sqrt(r0[...,0]**2 + r0[...,1]**2)
     vz = np.squeeze(np.sqrt(2*E - 2*V - Lz**2/R**2 - vx**2))
-    v0 = np.array([[vx,0.,vz]])
+    v0 = np.array([vx,0.,vz])
 
-    integrator = LeapfrogIntegrator(zotos_acceleration, func_args=params)
-    LE,q,p = lyapunov(x0, v0, integrator,
-                      dt=dt, nsteps=nsteps,
-                      d0=1E-5, nsteps_per_pullback=1)
+    x0 = np.append(r0,v0)
+
+    def F(t,X):
+        x,y,z,px,py,pz = X.T
+        dH_dq = zotos_acceleration(X[...,:3], *params)
+        return np.hstack((np.array([px, py, pz]).T, dH_dq))
+
+    integrator = DOPRI853Integrator(F, func_args=params)
+    nsteps = 100000
+    dt = 0.1
+    print(nsteps*dt*u.Myr)
+    nsteps_per_pullback = 10
+    d0 = 1e-5
+
+    LEs, xs = lyapunov(x0, integrator, dt, nsteps,
+                       d0=d0, nsteps_per_pullback=nsteps_per_pullback)
 
     print("Lyapunov exponent computed")
     plt.clf()
-    plt.semilogy(LE, marker=None)
+    plt.semilogy(LEs, marker=None)
     plt.savefig('zotos_le_{}.png'.format(orbit_type))
 
     plt.clf()
-    plt.plot(np.sqrt(q[:,0]**2+q[:,1]**2), q[:,2], marker=None)
+    plt.plot(np.sqrt(xs[:,0]**2+xs[:,1]**2), xs[:,2], marker=None)
     plt.savefig('zotos_orbit_{}.png'.format(orbit_type))
 
 def zotos_ball(orbit_type):
@@ -382,45 +340,102 @@ def zotos_ball(orbit_type):
         ii += 1
 
 def pal5():
-    dt = 0.01
-    nsteps = 1000000
-    print(nsteps*dt*u.Myr)
-
     from streams import usys
-    X = 8.312877511
-    Y = 0.242593717
-    Z = 16.811943627
-    x0 = np.array([[X,Y,Z]])
 
-    Vx = (-52.429087*u.km/u.s).decompose(usys).value
-    Vy = (-96.697363*u.km/u.s).decompose(usys).value
-    Vz = (-8.156130*u.km/u.s).decompose(usys).value
-    v0 = np.array([[Vx,Vy,Vz]])
+    r0 = np.array([[8.312877511,0.242593717,16.811943627]])
+    v0 = ([[-52.429087,-96.697363,-8.156130]]*u.km/u.s).decompose(usys).value
 
-    acc = np.zeros((1,3))
+    x0 = np.append(r0,v0)
+    acc = np.zeros((2,3))
     potential = LawMajewski2010()
 
-    integrator = LeapfrogIntegrator(zotos_acceleration, func_args=params)
-    LE,q,p = lyapunov(x0, v0, integrator,
-                      dt=dt, nsteps=nsteps,
-                      d0=1E-5, nsteps_per_pullback=1)
+    def F(t,X):
+        x,y,z,px,py,pz = X.T
+        dH_dq = potential._acceleration_at(X[...,:3], 2, acc)
+        return np.hstack((np.array([px, py, pz]).T, dH_dq))
+
+    integrator = DOPRI853Integrator(F)
+    nsteps = 100000
+    dt = 0.1
+    print(nsteps*dt*u.Myr)
+    nsteps_per_pullback = 10
+    d0 = 1e-5
+
+    LEs, xs = lyapunov(x0, integrator, dt, nsteps,
+                       d0=d0, nsteps_per_pullback=nsteps_per_pullback)
 
     print("Lyapunov exponent computed")
     plt.clf()
-    plt.semilogy(LE, marker=None)
-    plt.savefig('pal5_le_{}.png'.format(orbit_type))
+    plt.semilogy(LEs, marker=None)
+    plt.savefig('pal5_le.png')
 
     plt.clf()
-    plt.plot(np.sqrt(q[:,0]**2+q[:,1]**2), q[:,2], marker=None)
-    plt.savefig('pal5_orbit_{}.png'.format(orbit_type))
+    plt.plot(np.sqrt(xs[:,0]**2+xs[:,1]**2), xs[:,2], marker=None)
+    plt.savefig('pal5_orbit.png')
+
+def lm10_grid():
+    from streams import usys
+    acc = np.zeros((2,3))
+    potential = LawMajewski2010()
+
+    def F(t,X):
+        x,y,z,px,py,pz = X.T
+        dH_dq = potential._acceleration_at(X[...,:3], 2, acc)
+        return np.hstack((np.array([px, py, pz]).T, dH_dq))
+
+    nsteps = 1000000
+    dt = 0.1
+    print(nsteps*dt*u.Myr)
+    nsteps_per_pullback = 10
+    d0 = 1e-5
+
+    # will vary x,vx
+    y = 0.
+    z = 0.
+    vy = 0.
+    E = (6E4*(u.km/u.s)**2).decompose(usys).value
+
+    vx_max = (300*u.km/u.s).decompose(usys).value
+    for x in np.linspace(10., 30., 10): # kpc
+        for vx in np.linspace(0., vx_max, 10): # kpc/Myr
+            r0 = np.array([[x,y,z]])
+            V = potential._value_at(r0)
+            vz = np.squeeze(np.sqrt(2*(E - V) - vx**2 - vy**2))
+            print(x, y, z, vx, vy, vz)
+            v0 = np.array([[vx,vy,vz]])
+            x0 = np.append(r0,v0)
+
+            integrator = DOPRI853Integrator(F)
+
+            LEs, xs = lyapunov(x0, integrator, dt, nsteps,
+                               d0=d0,
+                               nsteps_per_pullback=nsteps_per_pullback)
+
+            print("Lyapunov exponent computed")
+            plt.clf()
+            plt.semilogy(LEs, marker=None)
+            plt.savefig('lm10_le_x{:.1f}_vx{:.3f}.png'.format(x,vx))
+
+            plt.clf()
+            plt.plot(np.sqrt(xs[:,0]**2+xs[:,1]**2), xs[:,2], marker=None)
+            plt.savefig('lm10_orbit_x{:.1f}_vx{:.3f}.png'.format(x,vx))
+
 
 if __name__ == "__main__":
     np.random.seed(42)
     #pendulum()
-
     #point_mass()
-    zotos('chaos')
-    zotos('4-3-box')
+    # zotos('4-3-box')
+    # zotos('chaos')
+    # zotos('2-1-box')
+    # zotos('8-5-box')
+    # zotos('3-2-box')
+    # zotos('chaos2')
+    # zotos('chaos3')
+
+    # pal5()
+
+    lm10_grid()
 
     # zotos_ball('4-3-box')
     # zotos_ball('2-1-box')
