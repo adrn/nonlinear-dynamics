@@ -11,6 +11,7 @@ import os, sys
 import logging
 
 # Third-party
+from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.constants import G
@@ -141,6 +142,10 @@ def initial_conditions(orbit_name, halo_shape='oblate'):
         r0 = np.array([0.18,0.])
         vR = 0.
 
+    elif orbit_name == "chaos2":
+        r0 = np.array([5.,0.])
+        vR = (22.*10*u.km/u.s).decompose(usys).value
+
     R,z = r0[...,:2].T
     E = (600*100*(u.km/u.s)**2).decompose(usys).value
     V = zotos_potential(R, z, *params)
@@ -152,54 +157,43 @@ def initial_conditions(orbit_name, halo_shape='oblate'):
     w0 = np.append(r0,v0)
     return w0, Lz
 
-def zotos_ball():
-    dt = 0.1
-    nsteps = 50000
+def zotos_ball(progenitor_orbit_name):
+    dt = 1.
+    nsteps = 5500
     nstars = 1000
 
-    all_x0 = np.random.normal(x0, 0.2, size=(nstars,3))
-    all_v0 = np.random.normal(v0, (10*u.km/u.s).decompose(usys).value, size=(nstars,3))
-    all_x0 = np.vstack((x0,all_x0))
-    all_v0 = np.vstack((v0,all_v0))
+    progenitor_w0,Lz = initial_conditions(progenitor_orbit_name, 'oblate')
+    print(progenitor_w0)
+    all_w0 = np.random.normal(progenitor_w0, [0.2,0.2,0.014,0.014], size=(nstars,4))
+    all_w0 = np.vstack((progenitor_w0, all_w0))
 
-    integrator = LeapfrogIntegrator(zotos_acceleration, func_args=params)
-    t,q,p = integrator.run(all_x0.copy(), all_v0.copy(),
-                           dt=dt, nsteps=nsteps)
+    print(nsteps*dt*u.Myr)
+    t,w = orbit(all_w0, (Lz,)+oblate_params, nsteps=nsteps, dt=dt)
+    print("finished integrating")
 
-    if not os.path.exists(orbit_type):
-        os.mkdir(orbit_type)
+    path = os.path.join(plot_path, progenitor_orbit_name)
+    if not os.path.exists(path):
+        os.mkdir(path)
 
     plt.figure(figsize=(10,10))
 
     ii = 0
     for jj in range(nsteps):
-        if jj % 100 != 0:
+        if jj % 10 != 0:
             continue
 
         plt.clf()
-        plt.plot(np.sqrt(q[:,0,0]**2 + q[:,0,1]**2), q[:,0,2],
+        plt.plot(w[:,0,0], w[:,0,1],
                 marker=None, linestyle='-', alpha=0.5, color='#3182bd')
-        plt.plot(np.sqrt(q[jj,1:,0]**2 + q[jj,1:,1]**2), q[jj,1:,2],
+        plt.plot(w[jj,1:,0], w[jj,1:,1],
                 marker='.', linestyle='none', alpha=0.65)
         plt.xlabel("R")
         plt.ylabel("Z")
         plt.xlim(0., 18)
         plt.ylim(-15, 15)
-        plt.savefig(os.path.join(orbit_type, 'RZ_zotos_ball_{:05d}.png'.format(ii)))
-
-        plt.clf()
-        plt.plot(q[:,0,0], q[:,0,2],
-                marker=None, linestyle='-', alpha=0.5, color='#3182bd')
-        plt.plot(q[jj,1:,0], q[jj,1:,2],
-                marker='.', linestyle='none', alpha=0.65)
-        plt.xlabel("X")
-        plt.ylabel("Z")
-        plt.xlim(-15., 15)
-        plt.ylim(-15, 15)
-        plt.savefig(os.path.join(orbit_type, 'XZ_zotos_ball_{:05d}.png'.format(ii)))
+        plt.savefig(os.path.join(path, 'RZ_zotos_ball_{:05d}.png'.format(ii)))
 
         ii += 1
-
 
 def generate_ic_grid(dR=0.1*u.kpc, dRdot=5.*u.km/u.s):
     # spacing between IC's in R and Rdot
@@ -243,7 +237,58 @@ def RRdot_surface_of_section(ws, z_slice=0.):
 
     return Rs, vRs
 
+def animate_orbit(orbit_name):
+
+    # orbit in 3D
+    w0, Lz = initial_conditions(orbit_name, halo_shape='oblate')
+    t,w = orbit(w0, (Lz,)+oblate_params, nsteps=5000, dt=1.)
+    print("orbit integrated")
+
+    # First set up the figure, the axis, and the plot element we want to animate
+    fig = plt.figure(figsize=(10,10))
+    ax = plt.axes(xlim=(0., 15), ylim=(-15, 15))
+    particle, = ax.plot([], [], linestyle='none', markersize=10,
+                        marker='o', markeredgecolor='none')
+    line, = ax.plot([], [], linestyle='-', marker=None, linewidth=2., alpha=0.75, zorder=-1)
+    ax.set_xlabel("R [kpc]", fontsize=22)
+    ax.set_ylabel("Z [kpc]", fontsize=22)
+
+    # initialization function: plot the background of each frame
+    def init():
+        line.set_data(w[...,0], w[...,1])
+        particle.set_data([], [])
+        return line,
+
+    # animation function.  This is called sequentially
+    def animate(i):
+        particle.set_data(w[i*4,0,0],w[i*4,0,1])
+        return particle,
+
+    # call the animator.  blit=True means only re-draw the parts that have changed.
+    anim = animation.FuncAnimation(fig, animate, init_func=init,
+                                   frames=len(w)//4, interval=20, blit=True)
+
+    anim.save(os.path.join(plot_path,orbit_name,'animate.mp4'),
+              fps=15, extra_args=['-codec', 'h264', '-pix_fmt', 'yuv420p'])
+
 if __name__ == "__main__":
+
+    # ball of particles
+    # zotos_ball("chaos2")
+    # zotos_ball("4-3-boxlet")
+    # zotos_ball("3-2-boxlet")
+    # zotos_ball("1-1-linear")
+    # zotos_ball("2-1-banana")
+    # zotos_ball("8-5-boxlet")
+    # sys.exit(0)
+
+    # animate_orbit("3-2-boxlet")
+    # animate_orbit("4-3-boxlet")
+    # animate_orbit("8-5-boxlet")
+    animate_orbit("chaos")
+    animate_orbit("chaos2")
+    sys.exit(0)
+
     # w0,Lz = initial_conditions("4-3-boxlet", "oblate")
     fname = "R_Rdot.npy"
 
@@ -262,7 +307,7 @@ if __name__ == "__main__":
     plt.xlim(0,14)
     plt.ylim(0,50)
     plt.savefig(os.path.join(plot_path, "SOS.png"))
-    
+
     plt.clf()
     plt.hexbin(Rs, vRs, cmap=plt.cm.Blues)
     plt.axis([Rs.min(), Rs.max(), vRs.min(), vRs.max()])
