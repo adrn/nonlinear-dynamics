@@ -235,7 +235,7 @@ def RRdot_surface_of_section(ws, z_slice=0.):
         k, = argrelmin(np.abs(z-z_slice))
 
         ix = np.zeros_like(z).astype(bool)
-        ix[k] = True
+        ix[k[2:]] = True
         ix &= vz > 0.
 
         Rs = np.append(Rs,R[ix])
@@ -250,18 +250,23 @@ if __name__ == "__main__":
     if not os.path.exists(fname):
         w0,Lz = generate_ic_grid(dR=0.1*u.kpc, dRdot=5*u.km/u.s)
         t,w = orbit(w0, (Lz,)+oblate_params, nsteps=10000)
-        Rs, vRs = RRdot_surface_of_section(w)
-        vRs = (vRs*u.kpc/u.Myr).to(u.km/u.s).value
-        np.save(fname, np.vstack((Rs,vRs)))
+        np.save(fname, w)
     else:
-        Rs, vRs = np.load(fname)
+        w = np.load(fname)
+
+    Rs, vRs = RRdot_surface_of_section(w)
+    vRs = (vRs*u.kpc/u.Myr).to(u.km/u.s).value
 
     plt.figure(figsize=(10,10))
-    plt.plot(Rs, vRs/10., marker='.', alpha=0.1, linestyle='none')
+    plt.plot(Rs, vRs/10., marker=',', alpha=0.75, linestyle='none')
     plt.xlim(0,14)
     plt.ylim(0,50)
     plt.savefig(os.path.join(plot_path, "SOS.png"))
-    #plt.plot(w[:,0,0], w[:,0,1], marker=None)
+    
+    plt.clf()
+    plt.hexbin(Rs, vRs, cmap=plt.cm.Blues)
+    plt.axis([Rs.min(), Rs.max(), vRs.min(), vRs.max()])
+    plt.savefig(os.path.join(plot_path, "SOS_bin.png"))
 
     #plt.show()
     #plt.savefig('zotos_orbit_{}.png'.format(orbit_type))
