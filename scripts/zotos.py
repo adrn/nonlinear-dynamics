@@ -248,7 +248,7 @@ if __name__ == "__main__":
     fname = "R_Rdot.npy"
 
     if not os.path.exists(fname):
-        w0,Lz = generate_ic_grid(dR=0.5*u.kpc, dRdot=15*u.km/u.s)
+        w0,Lz = generate_ic_grid(dR=0.1*u.kpc, dRdot=5*u.km/u.s)
         t,w = orbit(w0, (Lz,)+oblate_params, nsteps=10000)
         Rs, vRs = RRdot_surface_of_section(w)
         vRs = (vRs*u.kpc/u.Myr).to(u.km/u.s).value
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         Rs, vRs = np.load(fname)
 
     plt.figure(figsize=(10,10))
-    plt.plot(Rs, vRs/10., marker='.', alpha=0.5, linestyle='none')
+    plt.plot(Rs, vRs/10., marker='.', alpha=0.1, linestyle='none')
     plt.xlim(0,14)
     plt.ylim(0,50)
     plt.savefig(os.path.join(plot_path, "SOS.png"))
