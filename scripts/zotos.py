@@ -282,9 +282,9 @@ if __name__ == "__main__":
     # zotos_ball("8-5-boxlet")
     # sys.exit(0)
 
-    # animate_orbit("3-2-boxlet")
-    # animate_orbit("4-3-boxlet")
-    # animate_orbit("8-5-boxlet")
+    animate_orbit("3-2-boxlet")
+    animate_orbit("4-3-boxlet")
+    animate_orbit("8-5-boxlet")
     animate_orbit("chaos")
     animate_orbit("chaos2")
     sys.exit(0)
