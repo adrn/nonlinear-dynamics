@@ -180,7 +180,7 @@ if __name__ == "__main__":
         pparams[0] = pp[0]
         pparams[1] = pp[1]
         pparams[2] = pp[2]
-        LEs,ws = compute_lyapunov(sgr_w, nsteps=10000,
+        LEs,ws = compute_lyapunov(sgr_w, nsteps=100000,
                                   potential_params=tuple(pparams))
 
         print("Lyapunov exponent computed")
