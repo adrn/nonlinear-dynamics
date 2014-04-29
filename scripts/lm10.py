@@ -27,14 +27,14 @@ logger = logging.getLogger(__name__)
 
 plot_path = "plots/lm10"
 if not os.path.exists(plot_path):
-    os.mkdir(plot_path)
+    os.makedirs(plot_path)
 
 # unit system
 usys = [u.kpc, u.Myr, u.radian, u.M_sun]
 _G = G.decompose(usys).value
 
 # standard prolate:
-potential_params = (1.38, 1.36, 1.692969, 0.12462565, 1., 12.)
+potential_params = [1.38, 1.36, 1.692969, 0.12462565, 1., 12.]
 
 # phase-space position of Sgr today
 sgr_w = np.array([19.0149,2.64883,-6.8686,0.23543018,-0.03598748, 0.19917575])
@@ -52,7 +52,7 @@ def orbit(w0, potential_params, nsteps=10000, dt=1.):
     ts,ws = integrator.run(w0, dt=dt, nsteps=nsteps)
     return ts,ws
 
-def compute_lyapunov(w0, nsteps=10000):
+def compute_lyapunov(w0, nsteps=10000, potential_params=potential_params):
     nparticles = 2
     acc = np.zeros((nparticles,3))
 
@@ -109,8 +109,16 @@ def generate_ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     w0s = np.array(w0s)
     return w0s
 
+def potential_grid(nq1=5,nqz=5,nphi=5):
+    pps = []
+    for q1 in np.linspace(0.7,1.7,nq1):
+        for qz in np.linspace(0.7,1.7,nqz):
+            for phi in np.linspace(45,135,nphi):
+                pps.append([q1,qz,phi])
+    return np.array(pps)
+
 if __name__ == "__main__":
-    w0s = generate_ic_grid()
+    # w0s = generate_ic_grid()
 
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection='3d')
@@ -125,19 +133,44 @@ if __name__ == "__main__":
     # t,w = orbit(sgr_w.reshape((1,6)), potential_params)
     # w0 = np.array([19.,2.,-6.9,0.05,0.0, 0.05]).reshape((1,6))
 
+    # # Vary orbit parameters
+    # fig = plt.figure(figsize=(10,10))
+    # ax = fig.add_subplot(111)
+    # fig3d = plt.figure(figsize=(10,10))
+    # ax3d = fig3d.add_subplot(111, projection='3d')
+    # for ii,w0 in enumerate(w0s):
+    #     LEs,ws = compute_lyapunov(w0, nsteps=100000)
+
+    #     print("Lyapunov exponent computed")
+    #     ax.cla()
+    #     ax.semilogy(LEs, marker=None)
+    #     fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
+
+    #     ax3d.cla()
+    #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
+    #     fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
+
+    # Vary potential parameters
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(111)
     fig3d = plt.figure(figsize=(10,10))
     ax3d = fig3d.add_subplot(111, projection='3d')
-    for ii,w0 in enumerate(w0s):
-        LEs,ws = compute_lyapunov(w0, nsteps=100000)
+    for ii,pp in enumerate(potential_grid(nq1=5,nqz=5,nphi=5)):
+        pparams = potential_params
+        pparams[0] = pp[0]
+        pparams[1] = pp[1]
+        pparams[3] = pp[2]
+        LEs,ws = compute_lyapunov(sgr_w, nsteps=10000,
+                                  potential_params=tuple(pparams))
 
         print("Lyapunov exponent computed")
         ax.cla()
+        ax.set_title("q1={}, qz={}, phi={}".format(*pp))
         ax.semilogy(LEs, marker=None)
         fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
 
         ax3d.cla()
+        ax3d.set_title("q1={}, qz={}, phi={}".format(*pp))
         ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
         fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
 
