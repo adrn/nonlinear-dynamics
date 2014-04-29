@@ -167,50 +167,50 @@ if __name__ == "__main__":
     #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
     #     fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
 
-    # # Vary potential parameters
-    # nsteps_per_pullback = 10
-    # nsteps = 100000
-    # d = [] # append potential params and m,b to
+    # Vary potential parameters
+    nsteps_per_pullback = 10
+    nsteps = 100000
+    d = [] # append potential params and m,b to
 
-    # fig = plt.figure(figsize=(10,10))
-    # ax = fig.add_subplot(111)
-    # fig2d = plt.figure(figsize=(10,10))
-    # ax2d = fig2d.add_subplot(111)
-    # fig3d = plt.figure(figsize=(10,10))
-    # ax3d = fig3d.add_subplot(111, projection='3d')
-    # for ii,(q1,qz) in enumerate(potential_grid(nq1=5,nqz=5)):
-    #     pparams = list(potential_params)
-    #     pparams[0] = q1
-    #     pparams[1] = qz
-    #     LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps,
-    #                               nsteps_per_pullback=nsteps_per_pullback,
-    #                               potential_params=tuple(pparams))
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111)
+    fig2d = plt.figure(figsize=(10,10))
+    ax2d = fig2d.add_subplot(111)
+    fig3d = plt.figure(figsize=(10,10))
+    ax3d = fig3d.add_subplot(111, projection='3d')
+    for ii,(q1,qz) in enumerate(potential_grid(nq1=7,nqz=7)):
+        pparams = list(potential_params)
+        pparams[0] = q1
+        pparams[1] = qz
+        LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps,
+                                  nsteps_per_pullback=nsteps_per_pullback,
+                                  potential_params=tuple(pparams))
 
-    #     # take only the 2nd half
-    #     slc = nsteps//2//nsteps_per_pullback
-    #     y = LEs[slc:]
-    #     x = np.arange(0,len(y))
-    #     A = np.vstack([x, np.ones(len(x))]).T
-    #     m,b = np.linalg.lstsq(A, y)[0]
-    #     d.append([q1,qz,m,b])
+        # take only the 2nd half
+        slc = nsteps//2//nsteps_per_pullback
+        y = LEs[slc:]
+        x = np.arange(0,len(y))
+        A = np.vstack([x, np.ones(len(x))]).T
+        m,b = np.linalg.lstsq(A, y)[0]
+        d.append([q1,qz,m,b])
 
-    #     print("Lyapunov exponent computed")
-    #     ax.cla()
-    #     ax.set_title("q1={}, qz={}".format(q1,qz))
-    #     ax.semilogy(LEs, marker=None)
-    #     fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
+        print("Lyapunov exponent computed")
+        ax.cla()
+        ax.set_title("q1={}, qz={}".format(q1,qz))
+        ax.semilogy(LEs, marker=None)
+        fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
 
-    #     ax2d.cla()
-    #     ax2d.set_title("q1={}, qz={}".format(q1,qz))
-    #     ax2d.plot(ws[:,0], ws[:,2], marker=None)
-    #     fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
+        ax2d.cla()
+        ax2d.set_title("q1={}, qz={}".format(q1,qz))
+        ax2d.plot(ws[:,0], ws[:,2], marker=None)
+        fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
 
-    #     ax3d.cla()
-    #     ax3d.set_title("q1={}, qz={}".format(q1,qz))
-    #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
-    #     fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
+        ax3d.cla()
+        ax3d.set_title("q1={}, qz={}".format(q1,qz))
+        ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
+        fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
 
-    # np.savetxt("lm10.txt", np.array(d), fmt=['%.2f','%.2f','%e','%e'])
+    np.savetxt("lm10.txt", np.array(d), fmt=['%.2f','%.2f','%e','%e'])
 
     d = np.loadtxt("lm10.txt")
     plt.figure(figsize=(8,8))
