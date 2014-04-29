@@ -18,7 +18,7 @@ import numpy as np
 from astropy.constants import G
 import astropy.units as u
 from scipy.signal import argrelmin
-from streamteam.integrate import DOPRI853Integrator
+from streamteam.integrate import DOPRI853Integrator, LeapfrogIntegrator
 from streamteam.dynamics import lyapunov
 from streams.potential._lm10_acceleration import lm10_acceleration, lm10_potential
 
@@ -34,10 +34,11 @@ usys = [u.kpc, u.Myr, u.radian, u.M_sun]
 _G = G.decompose(usys).value
 
 # standard prolate:
-potential_params = [1.38, 1.36, 1.692969, 0.12462565, 1., 12.]
+potential_params = (1.38, 1.36, 1.692969, 0.12462565, 1., 12.)
 
 # phase-space position of Sgr today
-sgr_w = np.array([19.0149,2.64883,-6.8686,0.23543018,-0.03598748, 0.19917575])
+#sgr_w = np.array([19.0149,2.64883,-6.8686,0.23543018,-0.03598748, 0.19917575])
+sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
 # basically, hamiltons equations
 def F(t, X, nparticles, acc, *potential_params):
@@ -52,11 +53,20 @@ def orbit(w0, potential_params, nsteps=10000, dt=1.):
     ts,ws = integrator.run(w0, dt=dt, nsteps=nsteps)
     return ts,ws
 
+def leapfrog_orbit(w0, potential_params, nsteps=10000, dt=1.):
+    nparticles = w0.shape[0]
+    acc = np.zeros((nparticles,3))
+    integrator = LeapfrogIntegrator(lm10_acceleration,
+                                    func_args=(nparticles, acc)+potential_params)
+    ts,qs,ps = integrator.run(w0[:,:3].copy(), w0[:,3:].copy(),
+                           dt=dt, nsteps=nsteps)
+    return ts,np.hstack((qs,ps))
+
 def compute_lyapunov(w0, nsteps=10000, potential_params=potential_params):
     nparticles = 2
     acc = np.zeros((nparticles,3))
 
-    integrator = DOPRI853Integrator(F, func_args=(nparticles, acc)+potential_params)
+    integrator = DOPRI853Integrator(F, func_args=(nparticles, acc)+tuple(potential_params))
     dt = 1.
     print(nsteps*dt*u.Myr)
     nsteps_per_pullback = 10
@@ -130,8 +140,16 @@ if __name__ == "__main__":
     # plt.show()
     # sys.exit(0)
 
-    # t,w = orbit(sgr_w.reshape((1,6)), potential_params)
-    # w0 = np.array([19.,2.,-6.9,0.05,0.0, 0.05]).reshape((1,6))
+    # Check that orbit looks good
+    # t,w = orbit(sgr_w.reshape((1,6)), potential_params,
+    #             dt=-100., nsteps=100)
+    # t,lw = leapfrog_orbit(sgr_w.reshape((1,6)), potential_params,
+    #                       dt=-1., nsteps=10000)
+    # fig,ax = plt.subplots(1,1,figsize=(6,6))
+    # ax.plot(w[:,0,0], w[:,0,2], marker=None)
+    # ax.plot(lw[:,0,0], lw[:,0,2], marker=None, alpha=0.5)
+    # fig.savefig("plots/lm10_orbit.png")
+    # sys.exit(0)
 
     # # Vary orbit parameters
     # fig = plt.figure(figsize=(10,10))
@@ -153,13 +171,15 @@ if __name__ == "__main__":
     # Vary potential parameters
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(111)
+    fig2d = plt.figure(figsize=(10,10))
+    ax2d = fig2d.add_subplot(111)
     fig3d = plt.figure(figsize=(10,10))
     ax3d = fig3d.add_subplot(111, projection='3d')
     for ii,pp in enumerate(potential_grid(nq1=5,nqz=5,nphi=5)):
-        pparams = potential_params
+        pparams = list(potential_params)
         pparams[0] = pp[0]
         pparams[1] = pp[1]
-        pparams[3] = pp[2]
+        pparams[2] = pp[2]
         LEs,ws = compute_lyapunov(sgr_w, nsteps=10000,
                                   potential_params=tuple(pparams))
 
@@ -169,10 +189,15 @@ if __name__ == "__main__":
         ax.semilogy(LEs, marker=None)
         fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
 
+        ax2d.cla()
+        ax2d.set_title("q1={}, qz={}, phi={}".format(*pp))
+        ax2d.plot(ws[:,0], ws[:,2], marker=None)
+        fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
+
         ax3d.cla()
         ax3d.set_title("q1={}, qz={}, phi={}".format(*pp))
         ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
-        fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
+        fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
 
     sys.exit(0)
 
