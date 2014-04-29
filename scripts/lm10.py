@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
     # Vary potential parameters
     nsteps_per_pullback = 10
-    nsteps = 10000
+    nsteps = 100000
     d = [] # append potential params and m,b to
 
     fig = plt.figure(figsize=(10,10))
