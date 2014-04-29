@@ -169,7 +169,9 @@ if __name__ == "__main__":
 
     # Vary potential parameters
     nsteps_per_pullback = 10
-    nsteps = 100000
+    nsteps = 10000
+    dt = 10.
+
     d = [] # append potential params and m,b to
 
     fig = plt.figure(figsize=(10,10))
@@ -178,11 +180,13 @@ if __name__ == "__main__":
     ax2d = fig2d.add_subplot(111)
     fig3d = plt.figure(figsize=(10,10))
     ax3d = fig3d.add_subplot(111, projection='3d')
-    for ii,(q1,qz) in enumerate(potential_grid(nq1=7,nqz=7)):
+    for ii,(q1,qz) in enumerate(potential_grid(nq1=25,nqz=25)):
+    #for ii,(q1,qz) in enumerate([(0.7,0.866666666),(0.8666666666,1.366666666),(1.2,0.866666666),
+    #                             (1.2,1.533333333),(1.53333333,1.03333333)]):
         pparams = list(potential_params)
         pparams[0] = q1
         pparams[1] = qz
-        LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps,
+        LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps, dt=dt,
                                   nsteps_per_pullback=nsteps_per_pullback,
                                   potential_params=tuple(pparams))
 
@@ -210,20 +214,23 @@ if __name__ == "__main__":
         ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
         fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
 
+    d = np.array(d)
     np.savetxt("lm10.txt", np.array(d), fmt=['%.2f','%.2f','%e','%e'])
 
     d = np.loadtxt("lm10.txt")
-    plt.figure(figsize=(8,8))
+    fig = plt.figure(figsize=(8,8))
+    ax = fig.add_subplot(111)
+    ax.set_axis_bgcolor("#eeeeee")
 
-    chaotic = d[:,2] > 0.
-    plt.scatter(d[chaotic,0], d[chaotic,1], c=np.log10(d[chaotic,2]), s=75,
-                edgecolor='none', marker='o', cmap=cubehelix.cmap())
-    plt.plot(d[~chaotic,0], d[~chaotic,1], color='k', markeredgewidth=1.,
+    chaotic = (d[:,2] > 0.) | ((d[:,2] < 0.) & (np.log10(np.abs(d[:,2])) < -8.))
+    cax = ax.scatter(d[chaotic,0], d[chaotic,1], c=np.log10(d[chaotic,3]), s=75,
+                     edgecolor='#666666', marker='o', cmap=cubehelix.cmap())
+    ax.plot(d[~chaotic,0], d[~chaotic,1], color='k', markeredgewidth=1.,
                 markeredgecolor='k', marker='x', linestyle='none', markersize=10)
-    plt.colorbar()
-    plt.xlabel("$q_1$")
-    plt.ylabel("$q_z$")
-    plt.savefig(os.path.join(plot_path, "q1_qz_grid.png"))
+    fig.colorbar(cax)
+    ax.set_xlabel("$q_1$")
+    ax.set_ylabel("$q_z$")
+    fig.savefig(os.path.join(plot_path, "q1_qz_grid.png"))
     sys.exit(0)
 
     t,w = orbit(sgr_w.reshape((1,6)), potential_params)
