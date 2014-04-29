@@ -111,9 +111,9 @@ def generate_ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
 
 def potential_grid(nq1=5,nqz=5,nphi=5):
     pps = []
-    for q1 in np.linspace(0.7,1.7,nq1):
-        for qz in np.linspace(0.7,1.7,nqz):
-            for phi in np.linspace(45,135,nphi):
+    for q1 in np.append(np.linspace(0.7,1.7,nq1),1.38):
+        for qz in np.append(np.linspace(0.7,1.7,nqz),1.36):
+            for phi in np.append(np.linspace(0.785,2.356,nphi),1.692969):
                 pps.append([q1,qz,phi])
     return np.array(pps)
 
