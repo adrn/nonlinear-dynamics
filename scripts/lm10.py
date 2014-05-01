@@ -143,7 +143,6 @@ if __name__ == "__main__":
         logger.setLevel(logging.INFO)
 
     pool = get_pool(mpi=args.mpi, threads=args.threads)
-    if pool is not None: map = pool.map
 
     # used to be orbit()
     # integrator = DOPRI853Integrator(F, func_args=(potential,))
@@ -155,14 +154,13 @@ if __name__ == "__main__":
     ngrid = len(g)
 
     lyapunov_kwargs = dict(dt=1., nsteps=1000, noffset=4)
-    print(map(lyapunov_map,
-              repeat(sgr_w,ngrid)),
-              [potential._parameter_dict for ii in range(ngrid)],
-              repeat(lyapunov_kwargs,ngrid))
+    r = pool.map(lyapunov_map,
+                 repeat(sgr_w,ngrid),
+                 [potential._parameter_dict for ii in range(ngrid)],
+                 repeat(lyapunov_kwargs,ngrid))
 
-    if pool is not None:
-        pool.close()
-
+    pool.close()
+    print(r)
     sys.exit(0)
 
     # # Vary orbit parameters
