@@ -8,6 +8,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
 import os, sys
+from itertools import repeat
 import logging
 
 # Third-party
@@ -16,12 +17,12 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
-from astropy.constants import G
 import astropy.units as u
-from scipy.signal import argrelmin
-from streamteam.integrate import DOPRI853Integrator, LeapfrogIntegrator
+
+from streamteam.util import get_pool
+from streamteam.integrate import DOPRI853Integrator
 from streamteam.dynamics import lyapunov
-from streams.potential._lm10_acceleration import lm10_acceleration, lm10_potential
+from streams.potential.lm10 import LawMajewski2010
 
 # Create logger
 logger = logging.getLogger(__name__)
@@ -30,59 +31,32 @@ plot_path = "plots/lm10"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
-# unit system
-usys = [u.kpc, u.Myr, u.radian, u.M_sun]
-_G = G.decompose(usys).value
-
-# standard prolate:
-potential_params = (1.38, 1.36, 1.692969, 0.12462565, 1., 12.)
+# standard LM10 values:
+potential = LawMajewski2010()
 
 # phase-space position of Sgr today
-#sgr_w = np.array([19.0149,2.64883,-6.8686,0.23543018,-0.03598748, 0.19917575])
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
-# basically, hamiltons equations
-def F(t, X, nparticles, acc, *potential_params):
+# hamiltons equations
+def F(t, X, potential):
     x,y,z,px,py,pz = X.T
-    dH_dq = lm10_acceleration(X, nparticles, acc, *potential_params)
+    nparticles = x.size
+    acc = np.zeros((nparticles,3))
+    dH_dq = potential._acceleration_at(X, nparticles, acc)
     return np.hstack((np.array([px, py, pz]).T, dH_dq))
 
-def orbit(w0, potential_params, nsteps=10000, dt=1.):
-    nparticles = w0.shape[0]
-    acc = np.zeros((nparticles,3))
-    integrator = DOPRI853Integrator(F, func_args=(nparticles, acc)+potential_params)
-    ts,ws = integrator.run(w0, dt=dt, nsteps=nsteps)
-    return ts,ws
+def lyapunov_map(w0, potential_params, lyapunov_kwargs):
+    potential = LawMajewski2010(**potential_params)
+    integrator = DOPRI853Integrator(F, func_args=(potential,))
+    LE,w = lyapunov(w0, integrator, **lyapunov_kwargs)
+    return LE.shape
 
-def leapfrog_orbit(w0, potential_params, nsteps=10000, dt=1.):
-    nparticles = w0.shape[0]
-    acc = np.zeros((nparticles,3))
-    integrator = LeapfrogIntegrator(lm10_acceleration,
-                                    func_args=(nparticles, acc)+potential_params)
-    ts,qs,ps = integrator.run(w0[:,:3].copy(), w0[:,3:].copy(),
-                           dt=dt, nsteps=nsteps)
-    return ts,np.hstack((qs,ps))
-
-def compute_lyapunov(w0, nsteps=10000, dt=1.,
-                     nsteps_per_pullback=10, potential_params=potential_params):
-    nparticles = 2
-    acc = np.zeros((nparticles,3))
-
-    integrator = DOPRI853Integrator(F, func_args=(nparticles, acc)+tuple(potential_params))
-    print(nsteps*dt*u.Myr)
-    d0 = 1e-5
-
-    LEs, xs = lyapunov(w0, integrator, dt, nsteps,
-                       d0=d0, nsteps_per_pullback=nsteps_per_pullback)
-
-    return LEs,xs
-
-def generate_ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
+def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     # spacing between IC's in Phi and Rdot
-    dphi = dphi.decompose(usys).value
-    drdot = drdot.decompose(usys).value
-    max_rdot = (400*u.km/u.s).decompose(usys).value
-    max_phi = (360*u.deg).decompose(usys).value
+    dphi = dphi.decompose(potential.units).value
+    drdot = drdot.decompose(potential.units).value
+    max_rdot = (400*u.km/u.s).decompose(potential.units).value
+    max_phi = (360*u.deg).decompose(potential.units).value
 
     # find the energy of Sgr orbit
     pot = np.zeros((1,))
@@ -92,7 +66,7 @@ def generate_ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
 
     r = 20. # kpc
     phidot = 0. # rad/Myr
-    theta = (90*u.deg).decompose(usys).value # rad
+    theta = (90*u.deg).decompose(potential.units).value # rad
 
     # T = 0.5*(rdot**2 + thetadot**2/r**2 + phidot**2/(r*np.sin(theta))**2)
 
@@ -119,36 +93,77 @@ def generate_ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     w0s = np.array(w0s)
     return w0s
 
-def potential_grid(nq1=5,nqz=5):
-    pps = []
-    for q1 in np.append(np.linspace(0.7,1.7,nq1),1.38):
-        for qz in np.append(np.linspace(0.7,1.7,nqz),1.36):
-            pps.append([q1,qz])
-    return np.array(pps)
+def potential_grid(**kwargs):
+    if len(kwargs) > 2:
+        raise ValueError("Max of 2D grid.")
+
+    grids = []
+    for k,v in kwargs.items():
+        _min,_max,n = v
+        if hasattr(_min, "unit"):
+            _min = _min.decompose(potential.units).value
+            _max = _max.decompose(potential.units).value
+
+        grids.append((k,np.linspace(_min,_max,n)))
+
+    param_dict_list = []
+    for elem1 in grids[0][1]:
+        for elem2 in grids[1][1]:
+            g = dict()
+            g[grids[0][0]] = elem1
+            g[grids[1][0]] = elem2
+            param_dict_list.append(g)
+
+    return param_dict_list
 
 if __name__ == "__main__":
-    # w0s = generate_ic_grid()
+    from argparse import ArgumentParser
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot(w0s[:,0],w0s[:,1],w0s[:,2],marker='.',linestyle='none')
+    # Define parser object
+    parser = ArgumentParser(description="")
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose",
+                        default=False, help="Be chatty! (default = False)")
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet",
+                        default=False, help="Be quiet! (default = False)")
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot(w0s[:,3],w0s[:,4],w0s[:,5],marker='.',linestyle='none')
-    # plt.show()
-    # sys.exit(0)
+    # threading
+    parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
+                        help="Run with MPI.")
+    parser.add_argument("--threads", dest="threads", default=None, type=int,
+                        help="Number of multiprocessing threads to run on.")
 
-    # Check that orbit looks good
-    # t,w = orbit(sgr_w.reshape((1,6)), potential_params,
-    #             dt=-100., nsteps=100)
-    # t,lw = leapfrog_orbit(sgr_w.reshape((1,6)), potential_params,
-    #                       dt=-1., nsteps=10000)
-    # fig,ax = plt.subplots(1,1,figsize=(6,6))
-    # ax.plot(w[:,0,0], w[:,0,2], marker=None)
-    # ax.plot(lw[:,0,0], lw[:,0,2], marker=None, alpha=0.5)
-    # fig.savefig("plots/lm10_orbit.png")
-    # sys.exit(0)
+    args = parser.parse_args()
+
+    # Set logger level based on verbose flags
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    elif args.quiet:
+        logger.setLevel(logging.ERROR)
+    else:
+        logger.setLevel(logging.INFO)
+
+    pool = get_pool(mpi=args.mpi, threads=args.threads)
+    if pool is not None: map = pool.map
+
+    # used to be orbit()
+    # integrator = DOPRI853Integrator(F, func_args=(potential,))
+    # ts,ws = integrator.run(w0, dt=dt, nsteps=nsteps)
+
+    # grid of potential parameter dicts
+    g = potential_grid(q1=(0.7,2.0,5),
+                       phi=(45*u.deg,135*u.deg,5))
+    ngrid = len(g)
+
+    lyapunov_kwargs = dict(dt=1., nsteps=1000, noffset=4)
+    print(map(lyapunov_map,
+              repeat(sgr_w,ngrid)),
+              [potential._parameter_dict for ii in range(ngrid)],
+              repeat(lyapunov_kwargs,ngrid))
+
+    if pool is not None:
+        pool.close()
+
+    sys.exit(0)
 
     # # Vary orbit parameters
     # fig = plt.figure(figsize=(10,10))
