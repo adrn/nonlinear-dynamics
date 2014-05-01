@@ -8,7 +8,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
 import os, sys
-from itertools import repeat
+from functools import partial
 import logging
 
 # Third-party
@@ -31,6 +31,10 @@ plot_path = "plots/lm10"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
+cache_path = "cache/lm10"
+if not os.path.exists(cache_path):
+    os.makedirs(cache_path)
+
 # standard LM10 values:
 potential = LawMajewski2010()
 
@@ -44,12 +48,6 @@ def F(t, X, potential):
     acc = np.zeros((nparticles,3))
     dH_dq = potential._acceleration_at(X, nparticles, acc)
     return np.hstack((np.array([px, py, pz]).T, dH_dq))
-
-def lyapunov_map(w0, potential_params, lyapunov_kwargs):
-    potential = LawMajewski2010(**potential_params)
-    integrator = DOPRI853Integrator(F, func_args=(potential,))
-    LE,w = lyapunov(w0, integrator, **lyapunov_kwargs)
-    return LE.shape
 
 def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     # spacing between IC's in Phi and Rdot
@@ -93,6 +91,7 @@ def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     w0s = np.array(w0s)
     return w0s
 
+# TODO: support setting other parameters to fixed value
 def potential_grid(**kwargs):
     if len(kwargs) > 2:
         raise ValueError("Max of 2D grid.")
@@ -107,16 +106,59 @@ def potential_grid(**kwargs):
         grids.append((k,np.linspace(_min,_max,n)))
 
     param_dict_list = []
+    ix = 0
     for elem1 in grids[0][1]:
         for elem2 in grids[1][1]:
             g = dict()
             g[grids[0][0]] = elem1
             g[grids[1][0]] = elem2
+            g['index'] = ix
             param_dict_list.append(g)
+            ix += 1
 
     return param_dict_list
 
+def lyapunov_map(w0, potential_params, **lyapunov_kwargs):
+    potential = LawMajewski2010(**potential_params)
+    integrator = DOPRI853Integrator(F, func_args=(potential,))
+    LE,w = lyapunov(w0, integrator, **lyapunov_kwargs)
+
+    # TODO: need a solution for this...
+    # np.save(os.path.join(path, "le_{}.npy".format(index)), LE)
+    # np.save(os.path.join(path, "orbit_{}.npy".format(index)), w)
+
+    LE = np.mean(LE, axis=1)
+
+    # take only the 2nd half
+    y = LE[len(LE)//2:]
+    x = np.arange(0,len(y))
+    A = np.vstack([x, np.ones(len(x))]).T
+    m,b = np.linalg.lstsq(A, y)[0]
+    return [m,b]
+
+def main(pool, grid_kwargs, **lyapunov_kwargs):
+    # grid of potential parameter dicts
+    grid = potential_grid(**grid_kwargs)
+
+    # q1=(0.7,2.0,3),
+    # phi=(45*u.deg,135*u.deg,3))
+
+    func = partial(lyapunov_map, sgr_w, **lyapunov_kwargs)
+    r = pool.map(func, grid)
+
+    k1,k2 = grid_kwargs.keys()
+    names = [k1,k2,"m","b"]
+    return np.array([(g[k1],g[k2],row[0],row[1]) for g,row in zip(grid,r)],
+                    dtype=[(n,float) for n in names])
+
 if __name__ == "__main__":
+    def _parse_grid(tup):
+        pname = tup[0]
+        n = tup[-1]
+        _min,_max = tup[1:3]
+
+        return {pname : (u.Quantity.from_string(_min), u.Quantity.from_string(_max), int(n))}
+
     from argparse import ArgumentParser
 
     # Define parser object
@@ -125,6 +167,16 @@ if __name__ == "__main__":
                         default=False, help="Be chatty! (default = False)")
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet",
                         default=False, help="Be quiet! (default = False)")
+    parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
+                        default=False, help="Overwrite cached files.")
+
+    # potential parameter grid
+    parser.add_argument("--grid1", nargs=4, dest="grid1", required=True,
+                        help="Grid axis 1. Should be <param name> <min. val> "
+                        "<max. val> <num. vals>")
+    parser.add_argument("--grid2", nargs=4, dest="grid2", required=True,
+                        help="Grid axis 2. Should be <param name> <min. val> "
+                        "<max. val> <num. vals>")
 
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
@@ -142,112 +194,130 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
-    pool = get_pool(mpi=args.mpi, threads=args.threads)
+    g1 = _parse_grid(args.grid1)
+    g2 = _parse_grid(args.grid2)
+    g = dict(g1.items() + g2.items())
 
-    # used to be orbit()
-    # integrator = DOPRI853Integrator(F, func_args=(potential,))
-    # ts,ws = integrator.run(w0, dt=dt, nsteps=nsteps)
+    name = "_".join(sorted(g.keys()))
+    cache_name = os.path.join(cache_path, "{}.txt".format(name))
+    plot_name = os.path.join(plot_path, "{}.png".format(name))
 
-    # grid of potential parameter dicts
-    g = potential_grid(q1=(0.7,2.0,5),
-                       phi=(45*u.deg,135*u.deg,5))
-    ngrid = len(g)
+    if os.path.exists(cache_name) and args.overwrite:
+        os.remove(cache_name)
 
-    lyapunov_kwargs = dict(dt=1., nsteps=1000, noffset=4)
-    r = pool.map(lyapunov_map,
-                 repeat(sgr_w,ngrid),
-                 [potential._parameter_dict for ii in range(ngrid)],
-                 repeat(lyapunov_kwargs,ngrid))
+    if not os.path.exists(cache_name):
+        pool = get_pool(mpi=args.mpi, threads=args.threads)
+        lya_exps = main(pool, g, dt=10., nsteps=10000, noffset=4)
+        pool.close()
 
-    pool.close()
-    print(r)
-    sys.exit(0)
+        header = ",".join(lya_exps.dtype.names)
+        np.savetxt(cache_name, lya_exps, header=header,
+                   delimiter=",", fmt=['%.4f','%.4f','%e','%e'])
 
-    # # Vary orbit parameters
-    # fig = plt.figure(figsize=(10,10))
-    # ax = fig.add_subplot(111)
-    # fig3d = plt.figure(figsize=(10,10))
-    # ax3d = fig3d.add_subplot(111, projection='3d')
-    # for ii,w0 in enumerate(w0s):
-    #     LEs,ws = compute_lyapunov(w0, nsteps=100000)
+    lya_exps = np.genfromtxt(cache_name, delimiter=",", names=True)
 
-    #     print("Lyapunov exponent computed")
-    #     ax.cla()
-    #     ax.semilogy(LEs, marker=None)
-    #     fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
+    x1,x2 = lya_exps['m'].min(),lya_exps['m'].max()
+    dx = x2-x1
+    y1,y2 = lya_exps['b'].min(),lya_exps['b'].max()
+    dy = y2-y1
 
-    #     ax3d.cla()
-    #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
-    #     fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
-
-    # Vary potential parameters
-    nsteps_per_pullback = 10
-    nsteps = 10000
-    dt = 10.
-
-    d = [] # append potential params and m,b to
-
-    fig = plt.figure(figsize=(10,10))
-    ax = fig.add_subplot(111)
-    fig2d = plt.figure(figsize=(10,10))
-    ax2d = fig2d.add_subplot(111)
-    fig3d = plt.figure(figsize=(10,10))
-    ax3d = fig3d.add_subplot(111, projection='3d')
-    for ii,(q1,qz) in enumerate(potential_grid(nq1=25,nqz=25)):
-    #for ii,(q1,qz) in enumerate([(0.7,0.866666666),(0.8666666666,1.366666666),(1.2,0.866666666),
-    #                             (1.2,1.533333333),(1.53333333,1.03333333)]):
-        pparams = list(potential_params)
-        pparams[0] = q1
-        pparams[1] = qz
-        LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps, dt=dt,
-                                  nsteps_per_pullback=nsteps_per_pullback,
-                                  potential_params=tuple(pparams))
-
-        # take only the 2nd half
-        slc = nsteps//2//nsteps_per_pullback
-        y = LEs[slc:]
-        x = np.arange(0,len(y))
-        A = np.vstack([x, np.ones(len(x))]).T
-        m,b = np.linalg.lstsq(A, y)[0]
-        d.append([q1,qz,m,b])
-
-        print("Lyapunov exponent computed")
-        ax.cla()
-        ax.set_title("q1={}, qz={}".format(q1,qz))
-        ax.semilogy(LEs, marker=None)
-        fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
-
-        ax2d.cla()
-        ax2d.set_title("q1={}, qz={}".format(q1,qz))
-        ax2d.plot(ws[:,0], ws[:,2], marker=None)
-        fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
-
-        ax3d.cla()
-        ax3d.set_title("q1={}, qz={}".format(q1,qz))
-        ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
-        fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
-
-    d = np.array(d)
-    np.savetxt("lm10.txt", np.array(d), fmt=['%.2f','%.2f','%e','%e'])
-
-    d = np.loadtxt("lm10.txt")
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
     ax.set_axis_bgcolor("#eeeeee")
+    ax.scatter(lya_exps['m'], lya_exps['b'], c='k', s=50,
+               edgecolor='#666666', marker='o')#, cmap=cubehelix.cmap())
+    #ax.set_yscale('log')
+    ax.set_xlim(x1-dx/10,x2+dx/10)
+    ax.set_ylim(y1-dy/10,y2+dy/10)
+    fig.savefig(plot_name)
 
-    chaotic = (d[:,2] > 0.) | ((d[:,2] < 0.) & (np.log10(np.abs(d[:,2])) < -8.))
-    cax = ax.scatter(d[chaotic,0], d[chaotic,1], c=np.log10(d[chaotic,3]), s=75,
-                     edgecolor='#666666', marker='o', cmap=cubehelix.cmap())
-    ax.plot(d[~chaotic,0], d[~chaotic,1], color='k', markeredgewidth=1.,
-                markeredgecolor='k', marker='x', linestyle='none', markersize=10)
-    fig.colorbar(cax)
-    ax.set_xlabel("$q_1$")
-    ax.set_ylabel("$q_z$")
-    fig.savefig(os.path.join(plot_path, "q1_qz_grid.png"))
     sys.exit(0)
 
-    t,w = orbit(sgr_w.reshape((1,6)), potential_params)
+    # # # Vary orbit parameters
+    # # fig = plt.figure(figsize=(10,10))
+    # # ax = fig.add_subplot(111)
+    # # fig3d = plt.figure(figsize=(10,10))
+    # # ax3d = fig3d.add_subplot(111, projection='3d')
+    # # for ii,w0 in enumerate(w0s):
+    # #     LEs,ws = compute_lyapunov(w0, nsteps=100000)
 
-    plt.figure(figsize=(10,10))
-    plt.plot(w[:,0,0], w[:,0,2], marker=None, linestyle='-')
-    plt.savefig(os.path.join(plot_path, "sgr.png"))
+    # #     print("Lyapunov exponent computed")
+    # #     ax.cla()
+    # #     ax.semilogy(LEs, marker=None)
+    # #     fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
+
+    # #     ax3d.cla()
+    # #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
+    # #     fig3d.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
+
+    # # Vary potential parameters
+    # nsteps_per_pullback = 10
+    # nsteps = 10000
+    # dt = 10.
+
+    # d = [] # append potential params and m,b to
+
+    # fig = plt.figure(figsize=(10,10))
+    # ax = fig.add_subplot(111)
+    # fig2d = plt.figure(figsize=(10,10))
+    # ax2d = fig2d.add_subplot(111)
+    # fig3d = plt.figure(figsize=(10,10))
+    # ax3d = fig3d.add_subplot(111, projection='3d')
+    # for ii,(q1,qz) in enumerate(potential_grid(nq1=25,nqz=25)):
+    # #for ii,(q1,qz) in enumerate([(0.7,0.866666666),(0.8666666666,1.366666666),(1.2,0.866666666),
+    # #                             (1.2,1.533333333),(1.53333333,1.03333333)]):
+    #     pparams = list(potential_params)
+    #     pparams[0] = q1
+    #     pparams[1] = qz
+    #     LEs,ws = compute_lyapunov(sgr_w, nsteps=nsteps, dt=dt,
+    #                               nsteps_per_pullback=nsteps_per_pullback,
+    #                               potential_params=tuple(pparams))
+
+    #     # take only the 2nd half
+    #     slc = nsteps//2//nsteps_per_pullback
+    #     y = LEs[slc:]
+    #     x = np.arange(0,len(y))
+    #     A = np.vstack([x, np.ones(len(x))]).T
+    #     m,b = np.linalg.lstsq(A, y)[0]
+    #     d.append([q1,qz,m,b])
+
+    #     print("Lyapunov exponent computed")
+    #     ax.cla()
+    #     ax.set_title("q1={}, qz={}".format(q1,qz))
+    #     ax.semilogy(LEs, marker=None)
+    #     fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
+
+    #     ax2d.cla()
+    #     ax2d.set_title("q1={}, qz={}".format(q1,qz))
+    #     ax2d.plot(ws[:,0], ws[:,2], marker=None)
+    #     fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
+
+    #     ax3d.cla()
+    #     ax3d.set_title("q1={}, qz={}".format(q1,qz))
+    #     ax3d.plot(ws[:,0], ws[:,1], ws[:,2], marker=None)
+    #     fig3d.savefig(os.path.join(plot_path,'3d_orbit_{}.png'.format(ii)))
+
+    # d = np.array(d)
+    # np.savetxt("lm10.txt", np.array(d), fmt=['%.2f','%.2f','%e','%e'])
+
+    # d = np.loadtxt("lm10.txt")
+    # fig = plt.figure(figsize=(8,8))
+    # ax = fig.add_subplot(111)
+    # ax.set_axis_bgcolor("#eeeeee")
+
+    # chaotic = (d[:,2] > 0.) | ((d[:,2] < 0.) & (np.log10(np.abs(d[:,2])) < -8.))
+    # cax = ax.scatter(d[chaotic,0], d[chaotic,1], c=np.log10(d[chaotic,3]), s=75,
+    #                  edgecolor='#666666', marker='o', cmap=cubehelix.cmap())
+    # ax.plot(d[~chaotic,0], d[~chaotic,1], color='k', markeredgewidth=1.,
+    #             markeredgecolor='k', marker='x', linestyle='none', markersize=10)
+    # fig.colorbar(cax)
+    # ax.set_xlabel("$q_1$")
+    # ax.set_ylabel("$q_z$")
+    # fig.savefig(os.path.join(plot_path, "q1_qz_grid.png"))
+    # sys.exit(0)
+
+    # t,w = orbit(sgr_w.reshape((1,6)), potential_params)
+
+    # plt.figure(figsize=(10,10))
+    # plt.plot(w[:,0,0], w[:,0,2], marker=None, linestyle='-')
+    # plt.savefig(os.path.join(plot_path, "sgr.png"))
