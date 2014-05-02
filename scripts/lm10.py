@@ -10,8 +10,10 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 import os, sys
 from functools import partial
 import logging
+import base64
 
 # Third-party
+import h5py
 import cubehelix
 from matplotlib import animation
 import matplotlib.pyplot as plt
@@ -24,7 +26,7 @@ logger.setLevel(logging.INFO)
 from streamteam.util import get_pool
 from streamteam.integrate import DOPRI853Integrator
 from streamteam.dynamics import lyapunov
-from streams.potential.lm10 import LawMajewski2010
+from streams.potential._lm10_acceleration import lm10_acceleration
 
 try:
     x,v = os.path.split(__file__)
@@ -43,19 +45,113 @@ except:
 # if not os.path.exists(cache_path):
 #     os.makedirs(cache_path)
 
-# standard LM10 values:
-potential = LawMajewski2010()
-
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
 # hamiltons equations
-def F(t, X, potential):
+def F(t, X, *args):
+    # args order should be: q1, qz, phi, v_halo, q2, R_halo
     x,y,z,px,py,pz = X.T
     nparticles = x.size
     acc = np.zeros((nparticles,3))
-    dH_dq = potential._acceleration_at(X, nparticles, acc)
+    dH_dq = lm10_acceleration(X, nparticles, acc, *args)
+    # dH_dq = potential._acceleration_at(X, nparticles, acc)
     return np.hstack((np.array([px, py, pz]).T, dH_dq))
+
+class LyapunovMap(object):
+
+    def __init__(self, name, func, func_args=tuple(),
+                 lyapunov_kwargs=dict(), Integrator=DOPRI853Integrator,
+                 output_file=None, overwrite=False):
+        """ TODO
+
+            Parameters
+            ----------
+            name : str
+            func : callable
+                Must accept a single argument - the potential to run in.
+            func_args : sequence
+                Extra arguments passed to the equations of motion function.
+                These get *prepended* to parameter arguments passed later.
+            lyapunov_kwargs : keyword arguments
+                Other arguments passed to `lyapunov()`. Things like the
+                number of steps, timestep, etc.
+            Integrator : streamteam.Integrator (optional)
+            cache_data : bool (optional)
+                Cache output data.
+            make_plots : bool (optional)
+                Plot orbits and Lyapunov exponents/
+            overwrite : bool (optional)
+                Overwrite cached data files.
+        """
+
+        # path to save data and plots
+        self.output_path = "output/{}".format(name)
+        self.cache_path = os.path.join(self.output_path, "cache")
+        if not os.path.exists(self.cache_path):
+            os.makedirs(self.cache_path)
+
+        if output_file is None:
+            output_file = "lyapunov.hdf5"
+        self.output_filename = os.path.join(self.cache_path, output_file)
+
+        self.F = func
+        self._F_args = tuple(func_args)
+
+        # class to use for integration
+        self.Integrator = Integrator
+        self.lyapunov_kwargs = lyapunov_kwargs
+
+
+        overwrite = bool(overwrite)
+        if os.path.exists(self.output_filename) and overwrite:
+            logger.debug("Overwriting (removing) file {}".format(self.output_filename))
+            os.remove(self.output_filename)
+
+        if not os.path.exists(self.output_filename):
+            logger.debug("File {} does not exist".format(self.output_filename))
+            self.file = h5py.File(self.output_filename,'w')
+        else:
+            logger.debug("File {} already exists".format(self.output_filename))
+            self.file = h5py.File(self.output_filename,'r+')
+
+        self.w0 = None
+        self.potential_pars = None
+
+    def _map_helper(self, w0, potential_pars):
+        """ """
+        hashstr = "".join((str(w0) + str(potential_pars)).split())
+        hashed = base64.b64encode(hashstr)
+
+        try:
+            grp = self.file[hashed]
+            LE,t,w = grp["lambda_k"].value,grp["t"].value,grp["w"].value
+        except KeyError:
+            grp = self.file.create_group(hashed)
+
+            args = self._F_args + tuple(potential_pars)
+            integrator = self.Integrator(F, func_args=args)
+            LE,t,w = lyapunov(w0, integrator, **self.lyapunov_kwargs)
+
+            dset1 = grp.create_dataset("lambda_k", data=LE)
+            dset2 = grp.create_dataset("t", data=t)
+            dset3 = grp.create_dataset("w", data=w)
+
+        return LE,t,w
+
+    def __call__(self, arg):
+
+        if self.w0 is None and self.potential_pars is not None:
+            # assume arg is (index, w0)
+            return self._map_helper(arg, self.potential_pars)
+
+        elif self.potential_pars is None and self.w0 is not None:
+            # assume arg is (index, potential_pars)
+            return self._map_helper(self.w0, arg)
+
+        else:
+            raise ValueError("Must set either initial conditions or "
+                             "potential parameters.")
 
 def potential_grid(x, y, **kwargs):
     if len(x) > 1 or len(y) > 1:
@@ -86,21 +182,6 @@ def potential_grid(x, y, **kwargs):
             param_dict_list.append(dict(g.items()+kwargs.items()))
 
     return param_dict_list
-
-def lyapunov_map_potential(w0, path, index_potential_params, **lyapunov_kwargs):
-    index,potential_params = index_potential_params
-
-    potential = LawMajewski2010(**potential_params)
-    integrator = DOPRI853Integrator(F, func_args=(potential,))
-    LE,t,w = lyapunov(w0, integrator, **lyapunov_kwargs)
-
-    # TODO: need a solution for this...
-    np.save(os.path.join(path, "le_{}.npy".format(index)), LE)
-    np.save(os.path.join(path, "orbit_{}.npy".format(index)), w)
-
-    # LE = np.mean(LE, axis=1)
-
-    # return LE
 
 def main(pool, grid1, grid2, **lyapunov_kwargs):
 
@@ -189,6 +270,25 @@ if __name__ == "__main__":
         logger.setLevel(logging.DEBUG)
     elif args.quiet:
         logger.setLevel(logging.ERROR)
+
+    pool = get_pool(mpi=args.mpi, threads=args.threads)
+
+    lyapunov_kwargs = dict(nsteps=1000, dt=1., noffset=4)
+    test = LyapunovMap("test", F, lyapunov_kwargs=lyapunov_kwargs,
+                       output_file=None, overwrite=args.overwrite)
+
+    test.w0 = sgr_w
+    args = np.zeros((10,6))
+    args[:,0] = 1.38
+    args[:,1] = np.linspace(1.,1.7,args.shape[0])
+    args[:,2] = 1.692969
+    args[:,3] = 0.12462565900
+    args[:,4] = 1.
+    args[:,5] = 12.
+
+    r = pool.map(test, args)
+
+    test.file.close()
 
     sys.exit(0)
 
