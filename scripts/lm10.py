@@ -48,6 +48,25 @@ except:
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
+default_bounds = dict(q1=(0.7,2.0),
+                      qz=(0.7,2.0),
+                      phi=(0.79,2.36),
+                      v_halo=(0.1,0.2),
+                      q2=(0.7,2.0),
+                      r_halo=(5,20))
+
+def _parse_grid_spec(p):
+    name = str(p[0])
+    num = int(p[1])
+
+    if len(p) > 2:
+        _min = u.Quantity.from_string(p[2])
+        _max = u.Quantity.from_string(p[3])
+    else:
+        _min,_max = default_bounds[name]
+
+    return name, np.linspace(_min, _max, num)
+
 # hamiltons equations
 def F(t, X, *args):
     # args order should be: q1, qz, phi, v_halo, q2, R_halo
@@ -91,10 +110,6 @@ class LyapunovMap(object):
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
 
-        if output_file is None:
-            output_file = "lyapunov.hdf5"
-        self.output_filename = os.path.join(self.cache_path, output_file)
-
         self.F = func
         self._F_args = tuple(func_args)
 
@@ -102,40 +117,50 @@ class LyapunovMap(object):
         self.Integrator = Integrator
         self.lyapunov_kwargs = lyapunov_kwargs
 
+        self.overwrite = bool(overwrite)
+        # if os.path.exists(self.output_filename) and overwrite:
+        #     logger.debug("Overwriting (removing) file {}".format(self.output_filename))
+        #     os.remove(self.output_filename)
 
-        overwrite = bool(overwrite)
-        if os.path.exists(self.output_filename) and overwrite:
-            logger.debug("Overwriting (removing) file {}".format(self.output_filename))
-            os.remove(self.output_filename)
-
-        if not os.path.exists(self.output_filename):
-            logger.debug("File {} does not exist".format(self.output_filename))
-            self.file = h5py.File(self.output_filename,'w')
-        else:
-            logger.debug("File {} already exists".format(self.output_filename))
-            self.file = h5py.File(self.output_filename,'r+')
+        # if not os.path.exists(self.output_filename):
+        #     logger.debug("File {} does not exist".format(self.output_filename))
+        #     self.file = h5py.File(self.output_filename,'w')
+        # else:
+        #     logger.debug("File {} already exists".format(self.output_filename))
+        #     self.file = h5py.File(self.output_filename,'r+')
 
         self.w0 = None
         self.potential_pars = None
 
-    def _map_helper(self, w0, potential_pars):
+    def _map_helper(self, w0, potential_pars, filename=None):
         """ """
-        hashstr = "".join((str(w0) + str(potential_pars)).split())
-        hashed = base64.b64encode(hashstr)
 
-        try:
-            grp = self.file[hashed]
-            LE,t,w = grp["lambda_k"].value,grp["t"].value,grp["w"].value
-        except KeyError:
-            grp = self.file.create_group(hashed)
+        if filename is None:
+            hashstr = "".join((str(w0) + str(potential_pars)).split())
+            hashed = base64.b64encode(hashstr)
+            fn = os.path.join(self.cache_path, "{}.hdf5".format(hashed))
+        else:
+            fn = os.path.join(self.cache_path, filename)
 
+        if os.path.exists(fn) and self.overwrite:
+            os.remove(fn)
+
+        if not os.path.exists(fn):
             args = self._F_args + tuple(potential_pars)
             integrator = self.Integrator(F, func_args=args)
             LE,t,w = lyapunov(w0, integrator, **self.lyapunov_kwargs)
 
-            dset1 = grp.create_dataset("lambda_k", data=LE)
-            dset2 = grp.create_dataset("t", data=t)
-            dset3 = grp.create_dataset("w", data=w)
+            with h5py.File(fn, "w") as f:
+                f["lambda_k"] = LE
+                f["t"] = t
+                f["w"] = w
+                f["potential_pars"] = potential_pars
+
+        else:
+            with h5py.File(fn, "r") as f:
+                LE = f["lambda_k"].value
+                t = f["t"].value
+                w = f["w"].value
 
         return LE,t,w
 
@@ -143,11 +168,15 @@ class LyapunovMap(object):
 
         if self.w0 is None and self.potential_pars is not None:
             # assume arg is (index, w0)
-            return self._map_helper(arg, self.potential_pars)
+            index,w0 = arg
+            return self._map_helper(w0, self.potential_pars,
+                                    filename="{}.hdf5".format(index))
 
         elif self.potential_pars is None and self.w0 is not None:
             # assume arg is (index, potential_pars)
-            return self._map_helper(self.w0, arg)
+            index,potential_pars = arg
+            return self._map_helper(self.w0, potential_pars,
+                                    filename="{}.hdf5".format(index))
 
         else:
             raise ValueError("Must set either initial conditions or "
@@ -231,13 +260,6 @@ def plot_that(LE, q1, qz, ii):
     # fig2d.savefig(os.path.join(plot_path,'2d_orbit_{}.png'.format(ii)))
 
 if __name__ == "__main__":
-    def _parse_grid(tup):
-        pname = tup[0]
-        n = tup[-1]
-        _min,_max = tup[1:3]
-
-        return {pname : (u.Quantity.from_string(_min), u.Quantity.from_string(_max), int(n))}
-
     from argparse import ArgumentParser
 
     # Define parser object
@@ -249,19 +271,27 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
                         default=False, help="Overwrite cached files.")
 
-    # potential parameter grid
-    # parser.add_argument("--grid1", nargs=4, dest="grid1", required=True,
-    #                     help="Grid axis 1. Should be <param name> <min. val> "
-    #                     "<max. val> <num. vals>")
-    # parser.add_argument("--grid2", nargs=4, dest="grid2", required=True,
-    #                     help="Grid axis 2. Should be <param name> <min. val> "
-    #                     "<max. val> <num. vals>")
-
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
     parser.add_argument("--threads", dest="threads", default=None, type=int,
                         help="Number of multiprocessing threads to run on.")
+
+    # potential parameters
+    parser.add_argument("--xparam", dest="xparam", required=True, nargs="+",
+                        help="Grid axis 1 specification. <param name> <num. values> "
+                             "[min val, max val] ")
+    parser.add_argument("--yparam", dest="yparam", required=True, nargs="+",
+                        help="Grid axis 2 specification. <param name> <num. values> "
+                             "[min val, max val] ")
+    parser.add_argument("--name", dest="name", default=None,
+                        help="Name for this experiment.")
+
+    # pass to lyapunov
+    parser.add_argument("--nsteps", dest="nsteps", default=100000, type=int,
+                        help="Number of steps.")
+    parser.add_argument("--dt", dest="dt", default=1., type=float,
+                        help="Timestep.")
 
     args = parser.parse_args()
 
@@ -271,26 +301,47 @@ if __name__ == "__main__":
     elif args.quiet:
         logger.setLevel(logging.ERROR)
 
+    # parse parameter grid
+    xname,xgrid = _parse_grid_spec(args.xparam)
+    yname,ygrid = _parse_grid_spec(args.yparam)
+    X,Y = map(np.ravel, np.meshgrid(xgrid, ygrid))
+    gridsize = X.size
+
+    if args.name is None:
+        name = "{}_{}".format(xname, yname)
+    else:
+        name = args.name
+
+    # default parameter values
+    par_names = ["q1","qz","phi","v_halo","q2","r_halo"]
+    default_pars = (1.38, 1.36, 1.692969, 0.12462565900, 1., 12.)
+
+    ppars = np.zeros((gridsize, len(default_pars)))
+    for ii,p in enumerate(default_pars):
+        ppars[:,ii] = p
+
+    ppars[:,par_names.index(xname)] = X
+    ppars[:,par_names.index(yname)] = Y
+
+    # get a pool to use map()
     pool = get_pool(mpi=args.mpi, threads=args.threads)
 
-    lyapunov_kwargs = dict(nsteps=1000, dt=1., noffset=4)
-    test = LyapunovMap("test", F, lyapunov_kwargs=lyapunov_kwargs,
-                       output_file=None, overwrite=args.overwrite)
+    lyapunov_kwargs = dict(nsteps=args.nsteps, dt=args.dt, noffset=4)
+    lm = LyapunovMap(name, F, lyapunov_kwargs=lyapunov_kwargs,
+                     output_file=None, overwrite=args.overwrite)
 
-    test.w0 = sgr_w
-    args = np.zeros((10,6))
-    args[:,0] = 1.38
-    args[:,1] = np.linspace(1.,1.7,args.shape[0])
-    args[:,2] = 1.692969
-    args[:,3] = 0.12462565900
-    args[:,4] = 1.
-    args[:,5] = 12.
-
-    r = pool.map(test, args)
-
-    test.file.close()
+    lm.w0 = sgr_w
+    r = pool.map(lm, enumerate(ppars))
 
     sys.exit(0)
+
+
+
+
+
+
+
+
 
     g1 = _parse_grid(args.grid1)
     g2 = _parse_grid(args.grid2)
