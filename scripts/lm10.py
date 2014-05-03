@@ -28,6 +28,8 @@ from streamteam.integrate import DOPRI853Integrator
 from streamteam.dynamics import lyapunov
 from streams.potential._lm10_acceleration import lm10_acceleration
 
+os.chdir("/vega/astro/users/amp2217/projects/nonlinear-dynamics")
+
 try:
     x,v = os.path.split(__file__)
     if x != "scripts":
