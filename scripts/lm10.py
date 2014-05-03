@@ -28,17 +28,6 @@ from streamteam.integrate import DOPRI853Integrator
 from streamteam.dynamics import lyapunov
 from streams.potential._lm10_acceleration import lm10_acceleration
 
-os.chdir("/vega/astro/users/amp2217/projects/nonlinear-dynamics")
-
-try:
-    x,v = os.path.split(__file__)
-    if x != "scripts":
-        raise IOError()
-except:
-    logger.error("You must run scripts from the top level in the cloned "
-                 "nonlinear-dynamics directory.")
-    sys.exit(1)
-
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
@@ -75,7 +64,7 @@ class LyapunovMap(object):
 
     def __init__(self, name, func, func_args=tuple(),
                  lyapunov_kwargs=dict(), Integrator=DOPRI853Integrator,
-                 output_file=None, overwrite=False):
+                 output_file=None, overwrite=False, prefix=""):
         """ TODO
 
             Parameters
@@ -96,10 +85,12 @@ class LyapunovMap(object):
                 Plot orbits and Lyapunov exponents/
             overwrite : bool (optional)
                 Overwrite cached data files.
+            prefix : str (optional)
+                Prefix to the path.
         """
 
         # path to save data and plots
-        self.output_path = "output/{}".format(name)
+        self.output_path = os.path.join(prefix, "output/{}".format(name))
         self.cache_path = os.path.join(self.output_path, "cache")
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
@@ -218,6 +209,10 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
                         default=False, help="Overwrite cached files.")
 
+    # path
+    parser.add_argument("--prefix", type=str, dest="prefix", default="",
+                        help="Path prefix.")
+
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
@@ -275,7 +270,8 @@ if __name__ == "__main__":
 
     lyapunov_kwargs = dict(nsteps=args.nsteps, dt=args.dt, noffset=4)
     lm = LyapunovMap(name, F, lyapunov_kwargs=lyapunov_kwargs,
-                     output_file=None, overwrite=args.overwrite)
+                     output_file=None, overwrite=args.overwrite,
+                     prefix=args.prefix)
 
     lm.w0 = sgr_w
     results = pool.map(lm, enumerate(ppars))
