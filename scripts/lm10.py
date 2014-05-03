@@ -8,6 +8,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
 import os, sys
+import glob
 from functools import partial
 import logging
 import base64
@@ -131,15 +132,6 @@ class LyapunovMap(object):
                 f["w"] = w
                 f["potential_pars"] = potential_pars
 
-        else:
-            with h5py.File(fn, "r") as f:
-                LE = np.array(f["lambda_k"].value)
-                t = np.array(f["t"].value)
-                w = np.array(f["w"].value)
-        print(fn)
-
-        return LE,t,w
-
     def __call__(self, arg):
 
         if self.w0 is None and self.potential_pars is not None:
@@ -157,6 +149,16 @@ class LyapunovMap(object):
         else:
             raise ValueError("Must set either initial conditions or "
                              "potential parameters.")
+
+    def iterate_cache(self):
+        for fn in glob.glob(os.path.join(self.cache_path,"*.hdf5")):
+            with h5py.File(fn, "r") as f:
+                LE = np.array(f["lambda_k"].value)
+                t = np.array(f["t"].value)
+                w = np.array(f["w"].value)
+                ppars = f["potential_pars"].value
+            
+            yield LE,t,w,ppars
 
     def plot_lambda(self, lambda_k):
         # TODO: how to get info about parameters in here?
@@ -274,11 +276,11 @@ if __name__ == "__main__":
 
     # get a pool to use map()
     pool = get_pool(mpi=args.mpi, threads=args.threads)
-    results = pool.map(lm, zip(np.arange(gridsize),ppars))
+    pool.map(lm, zip(np.arange(gridsize),ppars))
     pool.close()
 
-    ms = np.zeros(len(results))
-    for ii,r in enumerate(results):
+    ms = np.zeros(gridsize)
+    for ii,r in enumerate(lm.iterate_cache()):
         ms[ii] = lm.classify_chaotic(r[0])
 
     fig = plt.figure(figsize=(8,8))
