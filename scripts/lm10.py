@@ -265,15 +265,14 @@ if __name__ == "__main__":
     ppars[:,par_names.index(xname)] = X
     ppars[:,par_names.index(yname)] = Y
 
-    # get a pool to use map()
-    pool = get_pool(mpi=args.mpi, threads=args.threads)
-
     lyapunov_kwargs = dict(nsteps=args.nsteps, dt=args.dt, noffset=4)
     lm = LyapunovMap(name, F, lyapunov_kwargs=lyapunov_kwargs,
                      output_file=None, overwrite=args.overwrite,
                      prefix=args.prefix)
-
     lm.w0 = sgr_w
+
+    # get a pool to use map()
+    pool = get_pool(mpi=args.mpi, threads=args.threads)
     results = pool.map(lm, zip(np.arange(gridsize),ppars))
 
     ms = np.zeros(len(results))
