@@ -120,6 +120,7 @@ class LyapunovMap(object):
         if os.path.exists(fn) and self.overwrite:
             os.remove(fn)
 
+        print(fn)
         if not os.path.exists(fn):
             args = self._F_args + tuple(potential_pars)
             integrator = self.Integrator(F, func_args=args)
@@ -136,7 +137,6 @@ class LyapunovMap(object):
                 LE = np.array(f["lambda_k"].value)
                 t = np.array(f["t"].value)
                 w = np.array(f["w"].value)
-                print(len(t))
 
         return LE,t,w
 
