@@ -274,7 +274,7 @@ if __name__ == "__main__":
                      prefix=args.prefix)
 
     lm.w0 = sgr_w
-    results = pool.map(lm, enumerate(ppars))
+    results = pool.map(lm, list(enumerate(ppars)))
 
     ms = np.zeros(len(results))
     for ii,r in enumerate(results):
