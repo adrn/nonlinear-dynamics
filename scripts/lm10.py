@@ -275,6 +275,7 @@ if __name__ == "__main__":
     # get a pool to use map()
     pool = get_pool(mpi=args.mpi, threads=args.threads)
     results = pool.map(lm, zip(np.arange(gridsize),ppars))
+    pool.close()
 
     ms = np.zeros(len(results))
     for ii,r in enumerate(results):
