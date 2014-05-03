@@ -133,9 +133,10 @@ class LyapunovMap(object):
 
         else:
             with h5py.File(fn, "r") as f:
-                LE = f["lambda_k"].value
-                t = f["t"].value
-                w = f["w"].value
+                LE = np.array(f["lambda_k"].value)
+                t = np.array(f["t"].value)
+                w = np.array(f["w"].value)
+                print(len(t))
 
         return LE,t,w
 
