@@ -157,7 +157,7 @@ class LyapunovMap(object):
                 t = np.array(f["t"].value)
                 w = np.array(f["w"].value)
                 ppars = f["potential_pars"].value
-            
+
             yield LE,t,w,ppars
 
     def plot_lambda(self, lambda_k):
@@ -358,3 +358,12 @@ def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
 
     w0s = np.array(w0s)
     return w0s
+
+
+"""
+mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/p\
+rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
+1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics
+
+mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
+"""
