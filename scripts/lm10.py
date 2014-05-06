@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 from streamteam.util import get_pool
 from streamteam.integrate import DOPRI853Integrator
-from streamteam.dynamics import lyapunov
+from streamteam.dynamics import lyapunov_max, sali
 from streams.potential._lm10_acceleration import lm10_acceleration
 
 # phase-space position of Sgr today
@@ -58,8 +58,62 @@ def F(t, X, *args):
     nparticles = x.size
     acc = np.zeros((nparticles,3))
     dH_dq = lm10_acceleration(X, nparticles, acc, *args)
-    # dH_dq = potential._acceleration_at(X, nparticles, acc)
     return np.hstack((np.array([px, py, pz]).T, dH_dq))
+
+def jerk(X, *args):
+    # args order should be: q1, qz, phi, v_halo, q2, R_halo
+    x,y,z,px,py,pz = X[...,:6].T
+    dx,dy,dz,dpx,dpy,dpz = X[...,6:].T
+    q1, qz, phi, vh, q2, rh = args
+
+    G = 4.49975332435e-12 # kpc^3 / Myr^2 / M_sun
+    a = 6.5 # kpc
+    b = 0.26 # kpc^2
+    GMD = G*1.E11 # M_sun
+    c = 0.7 # kpc
+    GMB = G*3.4E10 # M_sun
+
+    R = x*x + y*y
+    r = R + z*z
+
+    C1 = (np.cos(phi)/q1)**2 + (np.sin(phi)/q2)**2
+    C2 = (np.cos(phi)/q2)**2 + (np.sin(phi)/q1)**2
+    C3 = 2.*np.sin(phi)*np.cos(phi)*(1./q1**2 - 1./q2**2)
+    H = C1*x**2 + C2*y**2 + C3*x*y + (z/qz)**2 + rh**2
+    D = np.sqrt(R**2 + (a + np.sqrt(z**2 + b**2))**2)
+
+    xx = 2*C1/H*vh**2 - GMB/(r*(c+r)**2) + 2*GMB*x**2/(r**2*(c+r)**3) + GMB*x**2/(r**3*(c+r)**2) + vh**2/H**2*(-2*C1*x-C3*y)*(2*C1*x+C3*y) - GMD/D**3 + 3*GMD/D**5*x**2
+
+    yy = 2*C2/H*vh**2 - GMB/(r*(c+r)**2) + 2*GMB*y**2/(r**2*(c+r)**3) + GMB*y**2/(r**3*(c+r)**2) + vh**2/H**2*(-2*C2*y-C3*x)*(2*C2*y+C3*x) - GMD/D**3 + 3*GMD/D**5*y**2
+
+    zz = -GMB/(r*(c+r)**2) + 2*GMB*z**2/(r**2*(c+r)**3) + GMB*z**2/(r**3*(c+r)**2) + 2*vh**2 / (H*qz**2) - 4*vh**2*z**2 / (H**2*qz**4) + GMD*z**2*(a + np.sqrt(b**2 + z**2)) / (D**3 * (b**2 + z**2)**1.5) - GMD*z**2 / (D**3*(b**2 + z**2)) - GMD*(a + np.sqrt(b**2 + z**2))/(D**3*np.sqrt(b**2 + z**2)) + 3*GMD*z**2/(D**5*(b**2 + z**2))*(a + np.sqrt(b**2 + z**2))**2
+
+    xy = C3*vh**2/H + 2*GMB*x*y/(r**2*(r+c)**3) + GMB*x*y/(r**3*(r+c)**2) + vh**2/H**2*(-2*C1*x-C3*y)*(2*C2*y+C3*x) + 3*GMD*x*y/D**5
+
+    xz = 2*GMB*x*z/(r**2*(r+c)**3) + GMB*x*z/(r**3*(r+c)**2) + 2*vh**2*z/(H**2*qz**2)*(-2*C1*x-C3*y) + 3*GMD*x*z/(D**5*np.sqrt(b**2+z**2))*(a + np.sqrt(b**2 + z**2))
+
+    yz = 2*GMB*y*z/(r**2*(r+c)**3) + GMB*y*z/(r**3*(r+c)**2) + 2*vh**2*z/(H**2*qz**2)*(-2*C2*y-C3*x) + 3*GMD*y*z/(D**5*np.sqrt(b**2+z**2))*(a + np.sqrt(b**2 + z**2))
+
+    term1 = -(xx*dx + xy*dy + xz*dz)
+    term2 = -(xy*dx + yy*dy + yz*dz)
+    term3 = -(xz*dx + yz*dy + zz*dz)
+
+    return np.array([term1, term2, term3]).T
+
+def F_sali(t, X, *args):
+    # args order should be: q1, qz, phi, v_halo, q2, R_halo
+    x,y,z,px,py,pz = X[...,:6].T
+    dx,dy,dz,dpx,dpy,dpz = X[...,6:].T
+
+    nparticles = x.size
+    acc = np.zeros((nparticles,3))
+
+    term1 = np.array([px, py, pz]).T
+    term2 = lm10_acceleration(X[...,:6], nparticles, acc, *args)
+    term3 = np.array([dpx,dpy,dpz]).T
+    term4 = jerk(X, *args)
+
+    return np.hstack((term1,term2,term3,term4))
 
 class LyapunovMap(object):
 
@@ -199,6 +253,110 @@ class LyapunovMap(object):
 
         return m
 
+class SALIMap(object):
+
+    def __init__(self, name, func, func_args=tuple(),
+                 sali_kwargs=dict(), Integrator=DOPRI853Integrator,
+                 output_file=None, overwrite=False, prefix=""):
+        """ TODO
+
+            Parameters
+            ----------
+            name : str
+            func : callable
+                Must accept a single argument - the potential to run in.
+            func_args : sequence
+                Extra arguments passed to the equations of motion function.
+                These get *prepended* to parameter arguments passed later.
+            lyapunov_kwargs : keyword arguments
+                Other arguments passed to `lyapunov()`. Things like the
+                number of steps, timestep, etc.
+            Integrator : streamteam.Integrator (optional)
+            cache_data : bool (optional)
+                Cache output data.
+            make_plots : bool (optional)
+                Plot orbits and Lyapunov exponents/
+            overwrite : bool (optional)
+                Overwrite cached data files.
+            prefix : str (optional)
+                Prefix to the path.
+        """
+
+        # path to save data and plots
+        self.output_path = os.path.join(prefix, "output/{}".format(name))
+        self.cache_path = os.path.join(self.output_path, "cache")
+        if not os.path.exists(self.cache_path):
+            os.makedirs(self.cache_path)
+
+        self.F = func
+        self._F_args = tuple(func_args)
+
+        # class to use for integration
+        self.Integrator = Integrator
+        self.sali_kwargs = sali_kwargs
+
+        self.overwrite = bool(overwrite)
+
+        self.w0 = None
+        self.potential_pars = None
+
+    def _map_helper(self, w0, potential_pars, filename=None):
+        """ """
+
+        if filename is None:
+            hashstr = "".join((str(w0) + str(potential_pars)).split())
+            hashed = base64.b64encode(hashstr)
+            fn = os.path.join(self.cache_path, "{}.hdf5".format(hashed))
+        else:
+            fn = os.path.join(self.cache_path, filename)
+
+        if os.path.exists(fn) and self.overwrite:
+            os.remove(fn)
+
+        if not os.path.exists(fn):
+            args = self._F_args + tuple(potential_pars)
+            integrator = self.Integrator(self.F, func_args=args)
+            s,t,w = sali(w0, integrator, **self.sali_kwargs)
+
+            with h5py.File(fn, "w") as f:
+                f["sali"] = s
+                f["t"] = t
+                f["w"] = w
+                f["potential_pars"] = potential_pars
+
+    def __call__(self, arg):
+
+        if self.w0 is None and self.potential_pars is not None:
+            # assume arg is (index, w0)
+            index,w0 = arg
+            return self._map_helper(w0, self.potential_pars,
+                                    filename="{}.hdf5".format(index))
+
+        elif self.potential_pars is None and self.w0 is not None:
+            # assume arg is (index, potential_pars)
+            index,potential_pars = arg
+            return self._map_helper(self.w0, potential_pars,
+                                    filename="{}.hdf5".format(index))
+
+        else:
+            raise ValueError("Must set either initial conditions or "
+                             "potential parameters.")
+
+    def iterate_cache(self):
+        for fn in glob.glob(os.path.join(self.cache_path,"*.hdf5")):
+            with h5py.File(fn, "r") as f:
+                s = np.array(f["sali"].value)
+                t = np.array(f["t"].value)
+                w = np.array(f["w"].value)
+                ppars = f["potential_pars"].value
+
+            yield s,t,w,ppars
+
+    def classify_chaotic(self, s, threshold=1E-8):
+        if s[-1] < threshold:
+            return True
+        return False
+
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -268,10 +426,10 @@ if __name__ == "__main__":
     ppars[:,par_names.index(xname)] = X
     ppars[:,par_names.index(yname)] = Y
 
-    lyapunov_kwargs = dict(nsteps=args.nsteps, dt=args.dt, noffset=4)
-    lm = LyapunovMap(name, F, lyapunov_kwargs=lyapunov_kwargs,
-                     output_file=None, overwrite=args.overwrite,
-                     prefix=args.prefix)
+    kwargs = dict(nsteps=args.nsteps, dt=args.dt)
+    lm = SALIMap(name, F_sali, sali_kwargs=kwargs,
+                 output_file=None, overwrite=args.overwrite,
+                 prefix=args.prefix)
     lm.w0 = sgr_w
 
     # get a pool to use map()
@@ -279,27 +437,17 @@ if __name__ == "__main__":
     pool.map(lm, zip(np.arange(gridsize),ppars))
     pool.close()
 
-    ms = np.zeros(gridsize)
+    chaotic = np.zeros(gridsize).astype(bool)
     for ii,r in enumerate(lm.iterate_cache()):
-        ms[ii] = lm.classify_chaotic(r[0])
+        chaotic[ii] = lm.classify_chaotic(r[0])
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
-
-    # neg_ms = np.abs(ms[ms < 0.])
-    # bins = np.logspace(np.log10(neg_ms.min()),np.log10(neg_ms.max()),10)
-    # print(neg_ms, bins)
-    # ax.hist(neg_ms, bins=bins)
-    # ax.set_xscale('log')
-    # fig.savefig(os.path.join(lm.output_path, "ms.png"))
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
     ax.set_axis_bgcolor("#eeeeee")
 
-    chaotic = (ms > 0.) | (ms > (-1.8E-7))
-    # cax = ax.scatter(X[chaotic], Y[chaotic], c=np.log10(ms[chaotic]), s=75,
-    #                  edgecolor='#666666', marker='o', cmap=cubehelix.cmap())
     cax = ax.scatter(X[chaotic], Y[chaotic], c='k', s=75,
                      edgecolor='#666666', marker='o')
     ax.plot(X[~chaotic], Y[~chaotic], color='k', markeredgewidth=1.,
@@ -308,14 +456,6 @@ if __name__ == "__main__":
     ax.set_xlabel(xname)
     ax.set_ylabel(yname)
     fig.savefig(os.path.join(lm.output_path, "grid.png"))
-
-    sys.exit(0)
-
-    # t,w = orbit(sgr_w.reshape((1,6)), potential_params)
-
-    # plt.figure(figsize=(10,10))
-    # plt.plot(w[:,0,0], w[:,0,2], marker=None, linestyle='-')
-    # plt.savefig(os.path.join(plot_path, "sgr.png"))
 
 def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
     # spacing between IC's in Phi and Rdot
@@ -366,4 +506,6 @@ rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 
 1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics
 
 mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
+
+python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --prefix=/Users/adrian/projects/nonlinear-dynamics
 """
