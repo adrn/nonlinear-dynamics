@@ -374,6 +374,9 @@ if __name__ == "__main__":
     parser.add_argument("--prefix", type=str, dest="prefix", default="",
                         help="Path prefix.")
 
+    parser.add_argument("--plot-all", action="store_true", dest="plot_all",
+                        default=False)
+
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
@@ -440,6 +443,15 @@ if __name__ == "__main__":
     chaotic = np.zeros(gridsize).astype(bool)
     for ii,r in enumerate(lm.iterate_cache()):
         chaotic[ii] = lm.classify_chaotic(r[0])
+
+        if args.plot_all:
+            s,t,w,ppars = r
+            title = "{}={}, {}={}".format(xname,ppars[0],yname,ppars[1])
+
+            plt.clf()
+            plt.loglog(t,s,marker=None)
+            plt.title(title)
+            plt.savefig(os.path.join(lm.output_path, "{}.png".format(ii)))
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
