@@ -374,7 +374,9 @@ if __name__ == "__main__":
     parser.add_argument("--prefix", type=str, dest="prefix", default="",
                         help="Path prefix.")
 
-    parser.add_argument("--plot-all", action="store_true", dest="plot_all",
+    parser.add_argument("--plot-indicators", action="store_true", dest="plot_indicators",
+                        default=False)
+    parser.add_argument("--plot-orbits", action="store_true", dest="plot_orbits",
                         default=False)
 
     # threading
@@ -444,14 +446,20 @@ if __name__ == "__main__":
     for ii,r in enumerate(lm.iterate_cache()):
         chaotic[ii] = lm.classify_chaotic(r[0])
 
-        if args.plot_all:
-            s,t,w,ppars = r
-            title = "{}={}, {}={}".format(xname,ppars[0],yname,ppars[1])
+        s,t,w,ppars = r
+        title = "{}={}, {}={}".format(xname,ppars[0],yname,ppars[1])
 
+        if args.plot_indicators:
             plt.clf()
             plt.loglog(t,s,marker=None)
             plt.title(title)
             plt.savefig(os.path.join(lm.output_path, "{}.png".format(ii)))
+
+        if args.plot_orbits:
+            plt.clf()
+            plt.plot(w[...,0], w[...,2], marker=None)
+            plt.title(title)
+            plt.savefig(os.path.join(lm.output_path, "orbit_{}.png".format(ii)))
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
@@ -519,5 +527,5 @@ rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 
 
 mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
 
-python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --prefix=/Users/adrian/projects/nonlinear-dynamics
+python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --prefix=/Users/adrian/projects/nonlinear-dynamics --plot-all
 """
