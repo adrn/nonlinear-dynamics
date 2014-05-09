@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 from streamteam.util import get_pool
 from streamteam.integrate import DOPRI853Integrator
-from streamteam.dynamics import lyapunov_max, sali
+from streamteam.dynamics import lyapunov_spectrum, sali
 from streams.potential._lm10_acceleration import lm10_acceleration
 
 # phase-space position of Sgr today
@@ -52,13 +52,13 @@ def _parse_grid_spec(p):
     return name, np.linspace(_min, _max, num)
 
 # hamiltons equations
-def F(t, X, *args):
-    # args order should be: q1, qz, phi, v_halo, q2, R_halo
-    x,y,z,px,py,pz = X.T
-    nparticles = x.size
-    acc = np.zeros((nparticles,3))
-    dH_dq = lm10_acceleration(X, nparticles, acc, *args)
-    return np.hstack((np.array([px, py, pz]).T, dH_dq))
+# def F(t, X, *args):
+#     # args order should be: q1, qz, phi, v_halo, q2, R_halo
+#     x,y,z,px,py,pz = X.T
+#     nparticles = x.size
+#     acc = np.zeros((nparticles,3))
+#     dH_dq = lm10_acceleration(X, nparticles, acc, *args)
+#     return np.hstack((np.array([px, py, pz]).T, dH_dq))
 
 def jerk(X, *args):
     # args order should be: q1, qz, phi, v_halo, q2, R_halo
@@ -86,7 +86,7 @@ def jerk(X, *args):
 
     yy = 2*C2/H*vh**2 - GMB/(r*(c+r)**2) + 2*GMB*y**2/(r**2*(c+r)**3) + GMB*y**2/(r**3*(c+r)**2) + vh**2/H**2*(-2*C2*y-C3*x)*(2*C2*y+C3*x) - GMD/D**3 + 3*GMD/D**5*y**2
 
-    zz = -GMB/(r*(c+r)**2) + 2*GMB*z**2/(r**2*(c+r)**3) + GMB*z**2/(r**3*(c+r)**2) + 2*vh**2 / (H*qz**2) - 4*vh**2*z**2 / (H**2*qz**4) + GMD*z**2*(a + np.sqrt(b**2 + z**2)) / (D**3 * (b**2 + z**2)**1.5) - GMD*z**2 / (D**3*(b**2 + z**2)) - GMD*(a + np.sqrt(b**2 + z**2))/(D**3*np.sqrt(b**2 + z**2)) + 3*GMD*z**2/(D**5*(b**2 + z**2))*(a + np.sqrt(b**2 + z**2))**2
+    zz = -GMB/(r*(c+r)**2) + 2*GMB*z**2/(r**2*(c+r)**3) + GMB*z**2/(r**3*(c+r)**2) + 2*vh**2/(H*qz**2) - 4*vh**2*z**2 / (H**2*qz**4) + GMD*z**2*(a + np.sqrt(b**2 + z**2)) / (D**3 * (b**2 + z**2)**1.5) - GMD*z**2 / (D**3*(b**2 + z**2)) - GMD*(a + np.sqrt(b**2 + z**2))/(D**3*np.sqrt(b**2 + z**2)) + 3*GMD*z**2/(D**5*(b**2 + z**2))*(a + np.sqrt(b**2 + z**2))**2
 
     xy = C3*vh**2/H + 2*GMB*x*y/(r**2*(r+c)**3) + GMB*x*y/(r**3*(r+c)**2) + vh**2/H**2*(-2*C1*x-C3*y)*(2*C2*y+C3*x) + 3*GMD*x*y/D**5
 
@@ -177,8 +177,8 @@ class LyapunovMap(object):
 
         if not os.path.exists(fn):
             args = self._F_args + tuple(potential_pars)
-            integrator = self.Integrator(F, func_args=args)
-            LE,t,w = lyapunov(w0, integrator, **self.lyapunov_kwargs)
+            integrator = self.Integrator(self.F, func_args=args)
+            LE,t,w = lyapunov_spectrum(w0, integrator, **self.lyapunov_kwargs)
 
             with h5py.File(fn, "w") as f:
                 f["lambda_k"] = LE
@@ -214,146 +214,28 @@ class LyapunovMap(object):
 
             yield LE,t,w,ppars
 
-    def plot_lambda(self, lambda_k):
-        # TODO: how to get info about parameters in here?
-        ax.cla()
-        ax.set_title("q1={}, qz={}".format(q1,qz))
-        ax.semilogy(LEs, marker=None)
-        fig.savefig(os.path.join(plot_path,'le_{}.png'.format(ii)))
-
-    def classify_chaotic(self, lambda_k):
+    def classify_chaotic(self, lambda_k, m_threshold=-0.5, b_threshold=-10):
 
         lambda_k = np.mean(lambda_k, axis=1)
 
         # take only the 2nd half
-        y = lambda_k[len(lambda_k)//2:]
+        y = np.log10(lambda_k[len(lambda_k)//2:])
 
-        window = 10
-        niter = len(y) // window
-        mn = []
+        # window = 10
+        # niter = len(y) // window
+        # mn = []
 
-        for ii in range(niter):
-            mn.append(np.mean(y[ii*window:ii*window+window]))
-        mn = np.array(mn)
+        # for ii in range(niter):
+        #     mn.append(np.mean(y[ii*window:ii*window+window]))
+        # mn = np.array(mn)
+        mn = y.copy()
 
-        # take only the 2nd half
-        x = np.arange(0,len(mn))
+        # fit a line
+        x = np.log10(np.arange(1,len(mn)+1))
         A = np.vstack([x, np.ones(len(x))]).T
         m,b = np.linalg.lstsq(A, mn)[0]
 
-        # plt.figure()
-        # if m > (-1.8E-7):
-        #     plt.title("Chaotic")
-        # plt.semilogy(lambda_k, marker=None)
-
-        # plt.figure()
-        # plt.plot(mn, marker=None)
-        # plt.plot(x, m*x+b, marker=None)
-        # plt.show()
-
-        return m
-
-class SALIMap(object):
-
-    def __init__(self, name, func, func_args=tuple(),
-                 sali_kwargs=dict(), Integrator=DOPRI853Integrator,
-                 output_file=None, overwrite=False, prefix=""):
-        """ TODO
-
-            Parameters
-            ----------
-            name : str
-            func : callable
-                Must accept a single argument - the potential to run in.
-            func_args : sequence
-                Extra arguments passed to the equations of motion function.
-                These get *prepended* to parameter arguments passed later.
-            lyapunov_kwargs : keyword arguments
-                Other arguments passed to `lyapunov()`. Things like the
-                number of steps, timestep, etc.
-            Integrator : streamteam.Integrator (optional)
-            cache_data : bool (optional)
-                Cache output data.
-            make_plots : bool (optional)
-                Plot orbits and Lyapunov exponents/
-            overwrite : bool (optional)
-                Overwrite cached data files.
-            prefix : str (optional)
-                Prefix to the path.
-        """
-
-        # path to save data and plots
-        self.output_path = os.path.join(prefix, "output/{}".format(name))
-        self.cache_path = os.path.join(self.output_path, "cache")
-        if not os.path.exists(self.cache_path):
-            os.makedirs(self.cache_path)
-
-        self.F = func
-        self._F_args = tuple(func_args)
-
-        # class to use for integration
-        self.Integrator = Integrator
-        self.sali_kwargs = sali_kwargs
-
-        self.overwrite = bool(overwrite)
-
-        self.w0 = None
-        self.potential_pars = None
-
-    def _map_helper(self, w0, potential_pars, filename=None):
-        """ """
-
-        if filename is None:
-            hashstr = "".join((str(w0) + str(potential_pars)).split())
-            hashed = base64.b64encode(hashstr)
-            fn = os.path.join(self.cache_path, "{}.hdf5".format(hashed))
-        else:
-            fn = os.path.join(self.cache_path, filename)
-
-        if os.path.exists(fn) and self.overwrite:
-            os.remove(fn)
-
-        if not os.path.exists(fn):
-            args = self._F_args + tuple(potential_pars)
-            integrator = self.Integrator(self.F, func_args=args)
-            s,t,w = sali(w0, integrator, **self.sali_kwargs)
-
-            with h5py.File(fn, "w") as f:
-                f["sali"] = s
-                f["t"] = t
-                f["w"] = w
-                f["potential_pars"] = potential_pars
-
-    def __call__(self, arg):
-
-        if self.w0 is None and self.potential_pars is not None:
-            # assume arg is (index, w0)
-            index,w0 = arg
-            return self._map_helper(w0, self.potential_pars,
-                                    filename="{}.hdf5".format(index))
-
-        elif self.potential_pars is None and self.w0 is not None:
-            # assume arg is (index, potential_pars)
-            index,potential_pars = arg
-            return self._map_helper(self.w0, potential_pars,
-                                    filename="{}.hdf5".format(index))
-
-        else:
-            raise ValueError("Must set either initial conditions or "
-                             "potential parameters.")
-
-    def iterate_cache(self):
-        for fn in glob.glob(os.path.join(self.cache_path,"*.hdf5")):
-            with h5py.File(fn, "r") as f:
-                s = np.array(f["sali"].value)
-                t = np.array(f["t"].value)
-                w = np.array(f["w"].value)
-                ppars = f["potential_pars"].value
-
-            yield s,t,w,ppars
-
-    def classify_chaotic(self, s, threshold=1E-8):
-        if s[-1] < threshold:
+        if m > m_threshold and b > b_threshold:
             return True
         return False
 
@@ -432,9 +314,9 @@ if __name__ == "__main__":
     ppars[:,par_names.index(yname)] = Y
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
-    lm = SALIMap(name, F_sali, sali_kwargs=kwargs,
-                 output_file=None, overwrite=args.overwrite,
-                 prefix=args.prefix)
+    lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
+                     output_file=None, overwrite=args.overwrite,
+                     prefix=args.prefix)
     lm.w0 = sgr_w
 
     # get a pool to use map()
