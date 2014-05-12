@@ -294,7 +294,7 @@ if __name__ == "__main__":
 
     # get a pool to use map()
     pool = get_pool(mpi=args.mpi, threads=args.threads)
-    pool.map(lm, zip(np.arange(gridsize),ppars))
+    pool.map(lm, list(zip(np.arange(gridsize),ppars)))
     pool.close()
 
     chaotic = np.zeros(gridsize).astype(bool)
