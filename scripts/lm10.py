@@ -281,6 +281,9 @@ if __name__ == "__main__":
 
     ppars[:,par_names.index(xname)] = X
     ppars[:,par_names.index(yname)] = Y
+    logger.debug("{} index: {}".format(xname,par_names.index(xname)))
+    logger.debug("{} index: {}".format(yname,par_names.index(yname)))
+    logger.debug(ppars)
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
     # lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
