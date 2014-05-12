@@ -143,8 +143,8 @@ class LyapunovMap(object):
         if not os.path.exists(fn):
             args = self._F_args + tuple(potential_pars)
             integrator = self.Integrator(self.F, func_args=args)
-            # LE,t,w = lyapunov_spectrum(w0, integrator, **self.lyapunov_kwargs)
-            LE,t,w = lyapunov_max(w0, integrator, **self.lyapunov_kwargs) #HACK
+            LE,t,w = lyapunov_spectrum(w0, integrator, **self.lyapunov_kwargs)
+            # LE,t,w = lyapunov_max(w0, integrator, **self.lyapunov_kwargs) #HACK
 
             with h5py.File(fn, "w") as f:
                 f["lambda_k"] = LE
@@ -286,8 +286,8 @@ if __name__ == "__main__":
     logger.debug(ppars)
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
-    lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
-    # lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
+    # lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
+    lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
                      output_file=None, overwrite=args.overwrite,
                      prefix=args.prefix)
     lm.w0 = sgr_w
@@ -307,8 +307,8 @@ if __name__ == "__main__":
 
         if args.plot_indicators:
             plt.clf()
-            # plt.loglog(t,s,marker=None)
-            plt.loglog(s,marker=None) # hack
+            plt.loglog(t,s,marker=None)
+            # plt.loglog(s,marker=None) # hack
             plt.title(title)
             plt.savefig(os.path.join(lm.output_path, "{}.png".format(ii)))
 
