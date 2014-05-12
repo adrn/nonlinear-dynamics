@@ -263,6 +263,9 @@ if __name__ == "__main__":
     X,Y = map(np.ravel, np.meshgrid(xgrid, ygrid))
     gridsize = X.size
 
+    logger.debug("{}: {}".format(xname, xgrid))
+    logger.debug("{}: {}".format(yname, ygrid))
+
     if args.name is None:
         name = "{}_{}".format(xname, yname)
     else:
