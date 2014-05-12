@@ -26,8 +26,8 @@ logger.setLevel(logging.INFO)
 
 from streamteam.util import get_pool
 from streamteam.integrate import DOPRI853Integrator
-from streamteam.dynamics import lyapunov_spectrum, sali
-from streams.potential._lm10_acceleration import lm10_acceleration
+from streamteam.dynamics import lyapunov_spectrum, sali, lyapunov_max
+from streams.potential._lm10_acceleration import lm10_acceleration, lm10_variational_acceleration
 
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
@@ -52,53 +52,13 @@ def _parse_grid_spec(p):
     return name, np.linspace(_min, _max, num)
 
 # hamiltons equations
-# def F(t, X, *args):
-#     # args order should be: q1, qz, phi, v_halo, q2, R_halo
-#     x,y,z,px,py,pz = X.T
-#     nparticles = x.size
-#     acc = np.zeros((nparticles,3))
-#     dH_dq = lm10_acceleration(X, nparticles, acc, *args)
-#     return np.hstack((np.array([px, py, pz]).T, dH_dq))
-
-def jerk(X, *args):
+def F(t, X, *args):
     # args order should be: q1, qz, phi, v_halo, q2, R_halo
-    x,y,z,px,py,pz = X[...,:6].T
-    dx,dy,dz,dpx,dpy,dpz = X[...,6:].T
-    q1, qz, phi, vh, q2, rh = args
-
-    G = 4.49975332435e-12 # kpc^3 / Myr^2 / M_sun
-    a = 6.5 # kpc
-    b = 0.26 # kpc^2
-    GMD = G*1.E11 # M_sun
-    c = 0.7 # kpc
-    GMB = G*3.4E10 # M_sun
-
-    R = x*x + y*y
-    r = R + z*z
-
-    C1 = (np.cos(phi)/q1)**2 + (np.sin(phi)/q2)**2
-    C2 = (np.cos(phi)/q2)**2 + (np.sin(phi)/q1)**2
-    C3 = 2.*np.sin(phi)*np.cos(phi)*(1./q1**2 - 1./q2**2)
-    H = C1*x**2 + C2*y**2 + C3*x*y + (z/qz)**2 + rh**2
-    D = np.sqrt(R**2 + (a + np.sqrt(z**2 + b**2))**2)
-
-    xx = 2*C1/H*vh**2 - GMB/(r*(c+r)**2) + 2*GMB*x**2/(r**2*(c+r)**3) + GMB*x**2/(r**3*(c+r)**2) + vh**2/H**2*(-2*C1*x-C3*y)*(2*C1*x+C3*y) - GMD/D**3 + 3*GMD/D**5*x**2
-
-    yy = 2*C2/H*vh**2 - GMB/(r*(c+r)**2) + 2*GMB*y**2/(r**2*(c+r)**3) + GMB*y**2/(r**3*(c+r)**2) + vh**2/H**2*(-2*C2*y-C3*x)*(2*C2*y+C3*x) - GMD/D**3 + 3*GMD/D**5*y**2
-
-    zz = -GMB/(r*(c+r)**2) + 2*GMB*z**2/(r**2*(c+r)**3) + GMB*z**2/(r**3*(c+r)**2) + 2*vh**2/(H*qz**2) - 4*vh**2*z**2 / (H**2*qz**4) + GMD*z**2*(a + np.sqrt(b**2 + z**2)) / (D**3 * (b**2 + z**2)**1.5) - GMD*z**2 / (D**3*(b**2 + z**2)) - GMD*(a + np.sqrt(b**2 + z**2))/(D**3*np.sqrt(b**2 + z**2)) + 3*GMD*z**2/(D**5*(b**2 + z**2))*(a + np.sqrt(b**2 + z**2))**2
-
-    xy = C3*vh**2/H + 2*GMB*x*y/(r**2*(r+c)**3) + GMB*x*y/(r**3*(r+c)**2) + vh**2/H**2*(-2*C1*x-C3*y)*(2*C2*y+C3*x) + 3*GMD*x*y/D**5
-
-    xz = 2*GMB*x*z/(r**2*(r+c)**3) + GMB*x*z/(r**3*(r+c)**2) + 2*vh**2*z/(H**2*qz**2)*(-2*C1*x-C3*y) + 3*GMD*x*z/(D**5*np.sqrt(b**2+z**2))*(a + np.sqrt(b**2 + z**2))
-
-    yz = 2*GMB*y*z/(r**2*(r+c)**3) + GMB*y*z/(r**3*(r+c)**2) + 2*vh**2*z/(H**2*qz**2)*(-2*C2*y-C3*x) + 3*GMD*y*z/(D**5*np.sqrt(b**2+z**2))*(a + np.sqrt(b**2 + z**2))
-
-    term1 = -(xx*dx + xy*dy + xz*dz)
-    term2 = -(xy*dx + yy*dy + yz*dz)
-    term3 = -(xz*dx + yz*dy + zz*dz)
-
-    return np.array([term1, term2, term3]).T
+    x,y,z,px,py,pz = X.T
+    nparticles = x.size
+    acc = np.zeros((nparticles,3))
+    dH_dq = lm10_acceleration(X, nparticles, acc, *args)
+    return np.hstack((np.array([px, py, pz]).T, dH_dq))
 
 def F_sali(t, X, *args):
     # args order should be: q1, qz, phi, v_halo, q2, R_halo
@@ -106,12 +66,17 @@ def F_sali(t, X, *args):
     dx,dy,dz,dpx,dpy,dpz = X[...,6:].T
 
     nparticles = x.size
-    acc = np.zeros((nparticles,3))
+    acc = np.zeros((nparticles,6))
+    acc = lm10_variational_acceleration(X, nparticles, acc, *args)
+    # print(acc[:3,:])
+    # acc = lm10_acceleration(X, nparticles, acc, *args)
+    # print(acc[:3,:])
+    # sys.exit(0)
 
     term1 = np.array([px, py, pz]).T
-    term2 = lm10_acceleration(X[...,:6], nparticles, acc, *args)
+    term2 = acc[:,:3]
     term3 = np.array([dpx,dpy,dpz]).T
-    term4 = jerk(X, *args)
+    term4 = acc[:,3:]
 
     return np.hstack((term1,term2,term3,term4))
 
@@ -179,6 +144,7 @@ class LyapunovMap(object):
             args = self._F_args + tuple(potential_pars)
             integrator = self.Integrator(self.F, func_args=args)
             LE,t,w = lyapunov_spectrum(w0, integrator, **self.lyapunov_kwargs)
+            # LE,t,w = lyapunov_max(w0, integrator, **self.lyapunov_kwargs)
 
             with h5py.File(fn, "w") as f:
                 f["lambda_k"] = LE
@@ -314,6 +280,7 @@ if __name__ == "__main__":
     ppars[:,par_names.index(yname)] = Y
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
+    # lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
     lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
                      output_file=None, overwrite=args.overwrite,
                      prefix=args.prefix)
@@ -334,6 +301,7 @@ if __name__ == "__main__":
         if args.plot_indicators:
             plt.clf()
             plt.loglog(t,s,marker=None)
+            # plt.loglog(s,marker=None) # hack
             plt.title(title)
             plt.savefig(os.path.join(lm.output_path, "{}.png".format(ii)))
 
@@ -409,5 +377,7 @@ rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 
 
 mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
 
-python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --prefix=/Users/adrian/projects/nonlinear-dynamics --plot-all
+--plot-indicators
+
+python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=100000 --dt=1. --prefix=/Users/adrian/projects/nonlinear-dynamics
 """
