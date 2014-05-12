@@ -302,7 +302,8 @@ if __name__ == "__main__":
         chaotic[ii] = lm.classify_chaotic(r[0])
 
         s,t,w,ppars = r
-        title = "{}={}, {}={}".format(xname,ppars[0],yname,ppars[1])
+        title = "{}={}, {}={}".format(xname,ppars[par_names.index(xname)],
+                                      yname,ppars[par_names.index(yname)])
 
         if args.plot_indicators:
             plt.clf()
