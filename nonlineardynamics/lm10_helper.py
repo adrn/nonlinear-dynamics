@@ -23,6 +23,18 @@ default_bounds = dict(q1=(0.7,2.0),
                       q2=(0.7,2.0),
                       r_halo=(5,20))
 
+def _parse_grid_spec(p):
+    name = str(p[0])
+    num = int(p[1])
+
+    if len(p) > 2:
+        _min = u.Quantity.from_string(p[2])
+        _max = u.Quantity.from_string(p[3])
+    else:
+        _min,_max = default_bounds[name]
+
+    return name, np.linspace(_min, _max, num)
+
 # hamiltons equations
 # def F(t, X, *args):
 #     # args order should be: q1, qz, phi, v_halo, q2, R_halo

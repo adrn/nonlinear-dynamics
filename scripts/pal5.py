@@ -24,8 +24,7 @@ logger.setLevel(logging.INFO)
 # Project
 from streamteam.util import get_pool
 from nonlineardynamics import LyapunovMap
-from nonlineardynamics.lm10_helper import F, default_bounds
-from nonlineardynamics.util import _parse_grid_spec
+from nonlineardynamics.lm10_helper import F, default_bounds, _parse_grid_spec
 
 # phase-space position of Sgr today
 # pal5_w = np.array([8.161671207, 0.244760075, 16.962073974, -0.04566825,-0.12354177,-0.01531983])
