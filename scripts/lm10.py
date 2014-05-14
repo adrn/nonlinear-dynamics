@@ -177,14 +177,14 @@ if __name__ == "__main__":
         ii = ppars.tolist().index(list(pp))
         # chaotic[ii] = lm.is_chaotic(t, lyap)
         chaotic[ii] = True
-        dm[ii] = lm.slope)diff(t, lyap)
+        dm[ii] = lm.slope_diff(t, lyap)
 
         title = "{}={}, {}={}".format(xname, pp[par_names.index(xname)],
                                       yname, pp[par_names.index(yname)])
 
         if args.plot_indicators:
             plt.clf()
-            plt.loglog(t,s,marker=None)
+            plt.loglog(t,lyap,marker=None)
             plt.title(title)
             plt.xlim(t[1], t[-1])
             plt.ylim(1E-5, 1.)
@@ -260,7 +260,8 @@ mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp
 rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
 1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics
 
-python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=100000 --dt=1. --prefix=/Users/adrian/projects/nonlinear-dynamics
+# LAPTOP
+python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=100000 --dt=1. --prefix=/Users/adrian/projects/nonlinear-dynamics --plot-orbits --plot-indicators
 
 # DEIMOS
 python scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --dt=1. --prefix=/home/adrian/projects/nonlinear-dynamics --plot-orbits
