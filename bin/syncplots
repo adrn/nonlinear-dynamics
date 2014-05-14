@@ -9,7 +9,7 @@ if [[ "$1" == "yeti" ]]; then
     echo `rsync -vazr --exclude="*.hdf5" --include="*.png" yeti:/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/* ~/projects/nonlinear-dynamics/output/yeti`
 
 elif [[ "$1" == "hotfoot" ]]; then
-    echo `rsync -vazr --exclude="*.hdf5" --include="*.png" hotfoot:/hpc/astro/users/amp2217/projects/streams/plots/infer_potential/* ~/projects/streams/plots/hotfoot`
+    echo `rsync -vazr --exclude="*.hdf5" --include="*.png" hotfoot:/hpc/astro/users/amp2217/projects/nonlinear-dynamics/output/* ~/projects/nonlinear-dynamics/output/hotfoot`
 
 else
     echo "ERROR: Unrecognized machine '$1'"
