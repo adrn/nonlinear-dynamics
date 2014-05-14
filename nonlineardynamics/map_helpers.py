@@ -123,8 +123,7 @@ class LyapunovMap(object):
 
             yield LE,t,w,ppars,fn
 
-    def is_chaotic(self, t, lambda_k):
-
+    def slope_diff(self, t, lambda_k):
         max_ix = lambda_k.sum(axis=0).argmax()
         lyap = lambda_k[:,max_ix]
 
@@ -133,20 +132,18 @@ class LyapunovMap(object):
         mid = 10**(2*(logt.max() + logt.min()) / 3.)
         ix = np.abs(t[1:] - mid).argmin() + 1
 
-        # import matplotlib.pyplot as plt
-        # plt.clf()
-        # plt.loglog(t[1:], lyap[1:], marker=None)
-        # plt.show()
-
         # first third
+        ms = []
         for this_t, this_lyap in [(t[1:ix], lyap[1:ix]), (t[ix:], lyap[ix:])]:
             # fit a line
             x = np.log10(this_t)
             y = np.log10(this_lyap)
             A = np.vstack([x, np.ones(len(x))]).T
             m,b = np.linalg.lstsq(A, y)[0]
-            print(m)
-        print()
-        #sys.exit(0)
+            ms.append(m)
 
+        return ms[1] - ms[0]
+
+    def is_chaotic(self, t, lambda_k):
+        dm = self.slope_diff(t, lambda_k)
         return False
