@@ -152,7 +152,7 @@ if __name__ == "__main__":
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
     lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
                      overwrite=args.overwrite,
-                     prefix=args.prefix, 'pal5')
+                     prefix=args.prefix)
     lm.w0 = pal5_w
 
     # get a pool to use map()
