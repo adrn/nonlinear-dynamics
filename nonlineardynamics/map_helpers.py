@@ -50,7 +50,7 @@ class LyapunovMap(object):
         """
 
         # path to save data and plots
-        self.output_path = os.path.join(prefix, "output/{}".format(name))
+        self.output_path = os.path.join(prefix, "{}".format(name))
         self.cache_path = os.path.join(self.output_path, "cache")
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)

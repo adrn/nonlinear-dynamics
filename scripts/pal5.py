@@ -27,7 +27,7 @@ from streamteam.util import get_pool
 from nonlineardynamics import LyapunovMap
 
 # phase-space position of Sgr today
-sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
+pal5_w = np.array([8.161671207, 0.244760075, 16.962073974, -0.04566825,-0.12354177,-0.01531983])
 
 default_bounds = dict(q1=(0.7,2.0),
                       qz=(0.7,2.0),
@@ -152,8 +152,8 @@ if __name__ == "__main__":
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
     lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
                      overwrite=args.overwrite,
-                     prefix=args.prefix)
-    lm.w0 = sgr_w
+                     prefix=args.prefix, 'pal5')
+    lm.w0 = pal5_w
 
     # get a pool to use map()
     pool = get_pool(mpi=args.mpi, threads=args.threads)
@@ -190,8 +190,8 @@ if __name__ == "__main__":
             plt.clf()
             plt.plot(w[...,0], w[...,2], marker=None)
             plt.title(title)
-            plt.xlim(-75,75)
-            plt.ylim(-75,75)
+            plt.xlim(-40,40)
+            plt.ylim(-40,40)
             plt.savefig(os.path.join(lm.output_path, "orbit_{}.png".format(fn)))
 
     fig = plt.figure(figsize=(8,8))
@@ -208,67 +208,24 @@ if __name__ == "__main__":
     ax.set_ylabel(yname)
     fig.savefig(os.path.join(lm.output_path, "grid.png"))
 
-def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
-    # spacing between IC's in Phi and Rdot
-    dphi = dphi.decompose(potential.units).value
-    drdot = drdot.decompose(potential.units).value
-    max_rdot = (400*u.km/u.s).decompose(potential.units).value
-    max_phi = (360*u.deg).decompose(potential.units).value
-
-    # find the energy of Sgr orbit
-    pot = np.zeros((1,))
-    T = 0.5*np.sum(sgr_w[3:]**2)
-    V = lm10_potential(sgr_w[:3].reshape((1,3)), 1, pot, *potential_params)[0]
-    E = T + V
-
-    r = 20. # kpc
-    phidot = 0. # rad/Myr
-    theta = (90*u.deg).decompose(potential.units).value # rad
-
-    # T = 0.5*(rdot**2 + thetadot**2/r**2 + phidot**2/(r*np.sin(theta))**2)
-
-    w0s = []
-    for rdot in np.arange(0, max_rdot, drdot):
-        for phi in np.arange(0, max_phi, dphi):
-            X = r*np.cos(phi)*np.sin(theta)
-            Y = r*np.sin(phi)*np.sin(theta)
-            Z = r*np.cos(theta)
-            V = lm10_potential(np.vstack((X,Y,Z)).T, 1, pot, *potential_params)[0]
-
-            # solve for theta dot from energy
-            ptheta = r*np.sqrt(2*(E - V) - rdot**2 - phidot**2/(r*np.sin(theta))**2)
-            thetadot = ptheta / r**2
-
-            vx = rdot*np.sin(theta)*np.cos(phi) + r*np.cos(theta)*np.cos(phi)*thetadot - r*np.sin(theta)*np.sin(phi)*phidot
-            vy = rdot*np.sin(theta)*np.sin(phi) + r*np.cos(theta)*np.sin(phi)*thetadot + r*np.sin(theta)*np.cos(phi)*phidot
-            vz = rdot*np.cos(theta) - r*np.sin(theta)*thetadot
-
-            w0 = [X,Y,Z,vx,vy,vz]
-            if np.any(np.isnan(w0)): continue
-            w0s.append(w0)
-
-    w0s = np.array(w0s)
-    return w0s
-
-
 """
 
 # YETI
 mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/p\
-rojects/nonlinear-dynamics/scripts/sgr.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
-1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/sgr
+rojects/nonlinear-dynamics/scripts/pal5.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
+1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/pal5
 
-python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/sgr.py -v --xparam phi 16 0. 1.7 --yparam r_halo 8 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators
+python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/pal5.py -v --xparam phi 16 0. 1.7 --yparam r_halo 8 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/pal5 --plot-orbits --plot-indicators
 
-python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/sgr.py -v --xparam phi 21 0. 1.7 --yparam q1 7 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators
+python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/pal5.py -v --xparam phi 21 0. 1.7 --yparam q1 7 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/pal5 --plot-orbits --plot-indicators
 
-mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/sgr.py -v --xparam q1 15 --yparam qz 15 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators --mpi
+mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/pal5.py -v --xparam q1 15 --yparam qz 15 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/pal5 --plot-orbits --plot-indicators --mpi
 
 # LAPTOP
-python scripts/sgr.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --dt=5. --prefix=/Users/adrian/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators
+python scripts/pal5.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --dt=5. --prefix=/Users/adrian/projects/nonlinear-dynamics/output/pal5 --plot-orbits --plot-indicators
 
 # DEIMOS
-python scripts/sgr.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --dt=1. --prefix=/home/adrian/projects/nonlinear-dynamics/output/sgr --plot-orbits
+python scripts/pal5.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --dt=1. --prefix=/home/adrian/projects/nonlinear-dynamics/output/pal5 --plot-orbits
 
-mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/sgr.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics/output/sgr
+mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/pal5.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics/output/pal5
 """
