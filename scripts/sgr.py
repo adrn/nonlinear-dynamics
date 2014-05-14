@@ -22,56 +22,13 @@ from astropy import log as logger
 logger.setLevel(logging.INFO)
 
 # Project
-from streams.potential._lm10_acceleration import lm10_acceleration, lm10_variational_acceleration
 from streamteam.util import get_pool
 from nonlineardynamics import LyapunovMap
+from nonlineardynamics.lm10_helper import F, default_bounds
+from nonlineardynamics.util import _parse_grid_spec
 
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
-
-default_bounds = dict(q1=(0.7,2.0),
-                      qz=(0.7,2.0),
-                      phi=(0.79,2.36),
-                      v_halo=(0.1,0.2),
-                      q2=(0.7,2.0),
-                      r_halo=(5,20))
-
-def _parse_grid_spec(p):
-    name = str(p[0])
-    num = int(p[1])
-
-    if len(p) > 2:
-        _min = u.Quantity.from_string(p[2])
-        _max = u.Quantity.from_string(p[3])
-    else:
-        _min,_max = default_bounds[name]
-
-    return name, np.linspace(_min, _max, num)
-
-# hamiltons equations
-def F(t, X, *args):
-    # args order should be: q1, qz, phi, v_halo, q2, R_halo
-    x,y,z,px,py,pz = X.T
-    nparticles = x.size
-    acc = np.zeros((nparticles,3))
-    dH_dq = lm10_acceleration(X, nparticles, acc, *args)
-    return np.hstack((np.array([px, py, pz]).T, dH_dq))
-
-def F_sali(t, X, *args):
-    # args order should be: q1, qz, phi, v_halo, q2, R_halo
-    x,y,z,px,py,pz = X[...,:6].T
-    dx,dy,dz,dpx,dpy,dpz = X[...,6:].T
-
-    nparticles = x.size
-    acc = np.zeros((nparticles,6))
-    acc = lm10_variational_acceleration(X, nparticles, acc, *args)
-
-    term1 = np.array([px, py, pz]).T
-    term2 = acc[:,:3]
-    term3 = np.array([dpx,dpy,dpz]).T
-    term4 = acc[:,3:]
-
-    return np.hstack((term1,term2,term3,term4))
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -150,7 +107,7 @@ if __name__ == "__main__":
     ppars[:,par_names.index(yname)] = Y
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
-    lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
+    lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
                      overwrite=args.overwrite,
                      prefix=args.prefix)
     lm.w0 = sgr_w
