@@ -148,15 +148,11 @@ if __name__ == "__main__":
 
     ppars[:,par_names.index(xname)] = X
     ppars[:,par_names.index(yname)] = Y
-    logger.debug("{} index: {}".format(xname,par_names.index(xname)))
-    logger.debug("{} index: {}".format(yname,par_names.index(yname)))
-    logger.debug(ppars)
 
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
-    # lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
     lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
                      overwrite=args.overwrite,
-                     prefix=args.prefix)
+                     prefix=os.path.join(args.prefix, lm10))
     lm.w0 = sgr_w
 
     # get a pool to use map()
@@ -256,9 +252,17 @@ def ic_grid(dphi=10*u.deg, drdot=10*u.km/u.s):
 
 
 """
+
+# YETI
 mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/p\
 rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
 1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics
+
+python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam phi 16 0. 1.7 --yparam r_halo 8 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics --plot-orbits --plot-indicators
+
+python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam phi 21 0. 1.7 --yparam q1 7 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics --plot-orbits --plot-indicators
+
+mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp2217/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 15 --yparam qz 15 --nsteps=10000 --dt=5. --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics --plot-orbits --plot-indicators --mpi
 
 # LAPTOP
 python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=100000 --dt=1. --prefix=/Users/adrian/projects/nonlinear-dynamics --plot-orbits --plot-indicators
