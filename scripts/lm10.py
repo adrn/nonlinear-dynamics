@@ -164,7 +164,9 @@ if __name__ == "__main__":
     pool.map(lm, list(zip(np.arange(gridsize),ppars)))
     pool.close()
 
+    fig = plt.figure(figsize=(10,10))
     chaotic = np.zeros(gridsize).astype(bool)
+    dm = np.zeros(gridsize)
     for r in lm.iterate_cache():
         lyap, t, w, pp, fname = r
 
@@ -173,7 +175,9 @@ if __name__ == "__main__":
 
         # hack to get ii
         ii = ppars.tolist().index(list(pp))
-        chaotic[ii] = lm.is_chaotic(t, lyap)
+        # chaotic[ii] = lm.is_chaotic(t, lyap)
+        chaotic[ii] = True
+        dm[ii] = lm.slope)diff(t, lyap)
 
         title = "{}={}, {}={}".format(xname, pp[par_names.index(xname)],
                                       yname, pp[par_names.index(yname)])
@@ -182,26 +186,28 @@ if __name__ == "__main__":
             plt.clf()
             plt.loglog(t,s,marker=None)
             plt.title(title)
-            plt.savefig(os.path.join(lm.output_path, "{}.png".format(fn)))
+            plt.xlim(t[1], t[-1])
+            plt.ylim(1E-5, 1.)
+            plt.savefig(os.path.join(lm.output_path, "lyap_{}.png".format(fn)))
 
         if args.plot_orbits:
             plt.clf()
             plt.plot(w[...,0], w[...,2], marker=None)
             plt.title(title)
+            plt.xlim(-75,75)
+            plt.ylim(-75,75)
             plt.savefig(os.path.join(lm.output_path, "orbit_{}.png".format(fn)))
-
-    fig = plt.figure(figsize=(8,8))
-    ax = fig.add_subplot(111)
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
     ax.set_axis_bgcolor("#eeeeee")
 
-    cax = ax.scatter(X[chaotic], Y[chaotic], c='k', s=75,
-                     edgecolor='#666666', marker='o')
-    ax.plot(X[~chaotic], Y[~chaotic], color='k', markeredgewidth=1.,
-                markeredgecolor='k', marker='x', linestyle='none', markersize=10)
-    # fig.colorbar(cax)
+    #cax = ax.scatter(X[chaotic], Y[chaotic], c='k', s=75,
+    cax = ax.scatter(X[chaotic], Y[chaotic], c=dm, s=75,
+                     edgecolor='#666666', marker='o', cmap=cubehelix.cmap())
+    # ax.plot(X[~chaotic], Y[~chaotic], color='k', markeredgewidth=1.,
+    #             markeredgecolor='k', marker='x', linestyle='none', markersize=10)
+    fig.colorbar(cax)
     ax.set_xlabel(xname)
     ax.set_ylabel(yname)
     fig.savefig(os.path.join(lm.output_path, "grid.png"))
