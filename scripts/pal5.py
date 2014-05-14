@@ -28,7 +28,10 @@ from nonlineardynamics.lm10_helper import F, default_bounds
 from nonlineardynamics.util import _parse_grid_spec
 
 # phase-space position of Sgr today
-pal5_w = np.array([8.161671207, 0.244760075, 16.962073974, -0.04566825,-0.12354177,-0.01531983])
+# pal5_w = np.array([8.161671207, 0.244760075, 16.962073974, -0.04566825,-0.12354177,-0.01531983])
+
+# from Sarah, stream fanning
+pal5_w = np.array([8.312877511, 0.242593717, 16.811943627, -0.05361987,-0.09889357,-0.00834137])
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
