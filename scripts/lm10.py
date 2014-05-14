@@ -8,13 +8,10 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
 import os, sys
-import glob
 from functools import partial
 import logging
-import base64
 
 # Third-party
-import h5py
 import cubehelix
 from matplotlib import animation
 import matplotlib.pyplot as plt
@@ -24,10 +21,10 @@ import astropy.units as u
 from astropy import log as logger
 logger.setLevel(logging.INFO)
 
-from streamteam.util import get_pool
-from streamteam.integrate import DOPRI853Integrator
-from streamteam.dynamics import lyapunov_spectrum, sali, lyapunov_max
+# Project
 from streams.potential._lm10_acceleration import lm10_acceleration, lm10_variational_acceleration
+from streamteam.util import get_pool
+from nonlineardynamics import LyapunovMap
 
 # phase-space position of Sgr today
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
@@ -68,10 +65,6 @@ def F_sali(t, X, *args):
     nparticles = x.size
     acc = np.zeros((nparticles,6))
     acc = lm10_variational_acceleration(X, nparticles, acc, *args)
-    # print(acc[:3,:])
-    # acc = lm10_acceleration(X, nparticles, acc, *args)
-    # print(acc[:3,:])
-    # sys.exit(0)
 
     term1 = np.array([px, py, pz]).T
     term2 = acc[:,:3]
@@ -79,132 +72,6 @@ def F_sali(t, X, *args):
     term4 = acc[:,3:]
 
     return np.hstack((term1,term2,term3,term4))
-
-class LyapunovMap(object):
-
-    def __init__(self, name, func, func_args=tuple(),
-                 lyapunov_kwargs=dict(), Integrator=DOPRI853Integrator,
-                 output_file=None, overwrite=False, prefix=""):
-        """ TODO
-
-            Parameters
-            ----------
-            name : str
-            func : callable
-                Must accept a single argument - the potential to run in.
-            func_args : sequence
-                Extra arguments passed to the equations of motion function.
-                These get *prepended* to parameter arguments passed later.
-            lyapunov_kwargs : keyword arguments
-                Other arguments passed to `lyapunov()`. Things like the
-                number of steps, timestep, etc.
-            Integrator : streamteam.Integrator (optional)
-            cache_data : bool (optional)
-                Cache output data.
-            make_plots : bool (optional)
-                Plot orbits and Lyapunov exponents/
-            overwrite : bool (optional)
-                Overwrite cached data files.
-            prefix : str (optional)
-                Prefix to the path.
-        """
-
-        # path to save data and plots
-        self.output_path = os.path.join(prefix, "output/{}".format(name))
-        self.cache_path = os.path.join(self.output_path, "cache")
-        if not os.path.exists(self.cache_path):
-            os.makedirs(self.cache_path)
-
-        self.F = func
-        self._F_args = tuple(func_args)
-
-        # class to use for integration
-        self.Integrator = Integrator
-        self.lyapunov_kwargs = lyapunov_kwargs
-
-        self.overwrite = bool(overwrite)
-
-        self.w0 = None
-        self.potential_pars = None
-
-    def _map_helper(self, w0, potential_pars, filename=None):
-        """ """
-
-        if filename is None:
-            hashstr = "".join((str(w0) + str(potential_pars)).split())
-            hashed = base64.b64encode(hashstr)
-            fn = os.path.join(self.cache_path, "{}.hdf5".format(hashed))
-        else:
-            fn = os.path.join(self.cache_path, filename)
-
-        if os.path.exists(fn) and self.overwrite:
-            os.remove(fn)
-
-        if not os.path.exists(fn):
-            args = self._F_args + tuple(potential_pars)
-            integrator = self.Integrator(self.F, func_args=args)
-            LE,t,w = lyapunov_spectrum(w0, integrator, **self.lyapunov_kwargs)
-            # LE,t,w = lyapunov_max(w0, integrator, **self.lyapunov_kwargs) #HACK
-
-            with h5py.File(fn, "w") as f:
-                f["lambda_k"] = LE
-                f["t"] = t
-                f["w"] = w
-                f["potential_pars"] = potential_pars
-
-    def __call__(self, arg):
-
-        if self.w0 is None and self.potential_pars is not None:
-            # assume arg is (index, w0)
-            index,w0 = arg
-            return self._map_helper(w0, self.potential_pars,
-                                    filename="{}.hdf5".format(index))
-
-        elif self.potential_pars is None and self.w0 is not None:
-            # assume arg is (index, potential_pars)
-            index,potential_pars = arg
-            return self._map_helper(self.w0, potential_pars,
-                                    filename="{}.hdf5".format(index))
-
-        else:
-            raise ValueError("Must set either initial conditions or "
-                             "potential parameters.")
-
-    def iterate_cache(self):
-        for fn in glob.glob(os.path.join(self.cache_path,"*.hdf5")):
-            with h5py.File(fn, "r") as f:
-                LE = np.array(f["lambda_k"].value)
-                t = np.array(f["t"].value)
-                w = np.array(f["w"].value)
-                ppars = f["potential_pars"].value
-
-            yield LE,t,w,ppars
-
-    def classify_chaotic(self, lambda_k, m_threshold=-0.5, b_threshold=-10):
-
-        lambda_k = np.mean(lambda_k, axis=1)
-
-        # take only the 2nd half
-        y = np.log10(lambda_k[len(lambda_k)//2:])
-
-        # window = 10
-        # niter = len(y) // window
-        # mn = []
-
-        # for ii in range(niter):
-        #     mn.append(np.mean(y[ii*window:ii*window+window]))
-        # mn = np.array(mn)
-        mn = y.copy()
-
-        # fit a line
-        x = np.log10(np.arange(1,len(mn)+1))
-        A = np.vstack([x, np.ones(len(x))]).T
-        m,b = np.linalg.lstsq(A, mn)[0]
-
-        if m > m_threshold and b > b_threshold:
-            return True
-        return False
-
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -288,7 +155,7 @@ if __name__ == "__main__":
     kwargs = dict(nsteps=args.nsteps, dt=args.dt)
     # lm = LyapunovMap(name, F, lyapunov_kwargs=kwargs,
     lm = LyapunovMap(name, F_sali, lyapunov_kwargs=kwargs,
-                     output_file=None, overwrite=args.overwrite,
+                     overwrite=args.overwrite,
                      prefix=args.prefix)
     lm.w0 = sgr_w
 
@@ -299,7 +166,8 @@ if __name__ == "__main__":
 
     chaotic = np.zeros(gridsize).astype(bool)
     for ii,r in enumerate(lm.iterate_cache()):
-        chaotic[ii] = lm.classify_chaotic(r[0])
+        lyap, t, w, ppars = r
+        chaotic[ii] = lm.is_chaotic(t, lyap)
 
         s,t,w,ppars = r
         title = "{}={}, {}={}".format(xname,ppars[par_names.index(xname)],
