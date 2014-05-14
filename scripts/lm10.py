@@ -165,26 +165,30 @@ if __name__ == "__main__":
     pool.close()
 
     chaotic = np.zeros(gridsize).astype(bool)
-    for ii,r in enumerate(lm.iterate_cache()):
-        lyap, t, w, ppars = r
+    for r in lm.iterate_cache():
+        lyap, t, w, pp, fname = r
+
+        # prune filename
+        fn = os.path.splitext(os.path.split(fname)[1])[0]
+
+        # hack to get ii
+        ii = ppars.tolist().index(list(pp))
         chaotic[ii] = lm.is_chaotic(t, lyap)
 
-        s,t,w,ppars = r
-        title = "{}={}, {}={}".format(xname,ppars[par_names.index(xname)],
-                                      yname,ppars[par_names.index(yname)])
+        title = "{}={}, {}={}".format(xname, pp[par_names.index(xname)],
+                                      yname, pp[par_names.index(yname)])
 
         if args.plot_indicators:
             plt.clf()
             plt.loglog(t,s,marker=None)
-            # plt.loglog(s,marker=None) # hack
             plt.title(title)
-            plt.savefig(os.path.join(lm.output_path, "{}.png".format(ii)))
+            plt.savefig(os.path.join(lm.output_path, "{}.png".format(fn)))
 
         if args.plot_orbits:
             plt.clf()
             plt.plot(w[...,0], w[...,2], marker=None)
             plt.title(title)
-            plt.savefig(os.path.join(lm.output_path, "orbit_{}.png".format(ii)))
+            plt.savefig(os.path.join(lm.output_path, "orbit_{}.png".format(fn)))
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111)
@@ -250,9 +254,10 @@ mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp
 rojects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 \
 1.8 --nsteps=10000 --mpi --prefix=/vega/astro/users/amp2217/projects/nonlinear-dynamics
 
-mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
-
---plot-indicators
-
 python scripts/lm10.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=100000 --dt=1. --prefix=/Users/adrian/projects/nonlinear-dynamics
+
+# DEIMOS
+python scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --dt=1. --prefix=/home/adrian/projects/nonlinear-dynamics --plot-orbits
+
+mpiexec -n 4 python /home/adrian/projects/nonlinear-dynamics/scripts/lm10.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --mpi --prefix=/home/adrian/projects/nonlinear-dynamics
 """

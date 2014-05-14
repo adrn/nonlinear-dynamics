@@ -121,7 +121,7 @@ class LyapunovMap(object):
                 w = np.array(f["w"].value)
                 ppars = f["potential_pars"].value
 
-            yield LE,t,w,ppars
+            yield LE,t,w,ppars,fn
 
     def is_chaotic(self, t, lambda_k):
 
