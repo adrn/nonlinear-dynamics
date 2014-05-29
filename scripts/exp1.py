@@ -36,36 +36,6 @@ from streamteam.dynamics import lyapunov_spectrum
 from nonlineardynamics.apw_helpers import *
 from nonlineardynamics import LyapunovMap
 
-# set the name here
-name = "nfw"
-
-project_path = os.path.split(os.environ['STREAMSPATH'])[0]
-output_path = os.path.join(project_path, "nonlinear-dynamics", "output")
-path = os.path.join(output_path, name)
-
-plot_path = os.path.join(path, "plots")
-if not os.path.exists(plot_path):
-    os.makedirs(plot_path)
-
-# Most parameters taken from:
-#   http://www.aanda.org/articles/aa/pdf/2013/01/aa20540-12.pdf
-# Rs estimated from Rvir=267 / c=12. (Xue (Beers) et al. paper)
-potential_params = dict()
-
-# disk
-potential_params['Md'] = 7.E10 # Msun
-potential_params['a'] = 3.3
-potential_params['b'] = 0.29
-
-# nucleus
-potential_params['Mn'] = 10E9 # Msun
-potential_params['c'] = 0.24
-
-# halo
-potential_params['Mh'] = 2.5E12 # Msun
-potential_params['Rs'] = 40.
-potential_params['q'] = 0.8
-
 def R_Rdot_grid(E, potential_params, nR=10, nRdot=10):
     z = 0.
 
@@ -116,7 +86,38 @@ def plot_rotation_curve(potential_params):
     plt.ylabel("V [km/s]")
     plt.savefig(os.path.join(plot_path, "rotation_curve.png"))
 
-def main(mpi=False, overwrite=False):
+def main(pool, overwrite=False):
+    # set the name here
+    name = "nfw"
+
+    project_path = os.path.split(os.environ['STREAMSPATH'])[0]
+    output_path = os.path.join(project_path, "nonlinear-dynamics", "output")
+    path = os.path.join(output_path, name)
+
+    plot_path = os.path.join(path, "plots")
+    if not os.path.exists(plot_path):
+        os.makedirs(plot_path)
+
+    # Most parameters taken from:
+    #   http://www.aanda.org/articles/aa/pdf/2013/01/aa20540-12.pdf
+    # Rs estimated from Rvir=267 / c=12. (Xue (Beers) et al. paper)
+    potential_params = dict()
+
+    # disk
+    potential_params['Md'] = 7.E10 # Msun
+    potential_params['a'] = 3.3
+    potential_params['b'] = 0.29
+
+    # nucleus
+    potential_params['Mn'] = 10E9 # Msun
+    potential_params['c'] = 0.24
+
+    # halo
+    potential_params['Mh'] = 2.5E12 # Msun
+    potential_params['Rs'] = 40.
+    potential_params['q'] = 0.8
+
+    # plot the rotation curve for this potential
     plot_rotation_curve(potential_params)
 
     # integration shite
@@ -144,7 +145,6 @@ def main(mpi=False, overwrite=False):
     lm.potential_pars = potential_params.items()
 
     # get a pool to use map()
-    pool = get_pool(mpi=mpi)
     pool.map(lm, list(zip(np.arange(gridsize),w0s)))
     pool.close()
 
@@ -221,4 +221,5 @@ if __name__ == "__main__":
     elif args.quiet:
         logger.setLevel(logging.ERROR)
 
-    main(mpi=args.mpi, overwrite=args.overwrite)
+    pool = get_pool(mpi=args.mpi)
+    main(pool=pool, overwrite=args.overwrite)
