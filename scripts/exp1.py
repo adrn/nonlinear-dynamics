@@ -130,7 +130,8 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
 
     # generate a grid of R, Rdot
     R,Rdot = R_Rdot_grid(E, potential_params, nR=ngrid, nRdot=ngrid)
-    w0s = w0_from_grid(E, potential_params, R, Rdot)
+    #w0s = w0_from_grid(E, potential_params, R, Rdot) # HACK
+    w0s = np.array([[19.61443808,0.,0.,0.25824497]])
     gridsize = len(w0s)
 
     # grid of IC's
@@ -169,6 +170,17 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
         print(r.min(), r.max())
 
         # orbit
+        plt.clf()
+        plt.title(r"$R$={}, $\dot{{R}}$={}".format(w0[0], w0[2]))
+        plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
+        plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
+
+        plt.plot(w[...,0], w[...,1], marker=None)
+        plt.xlim(0., 85.)
+        plt.ylim(-45., 45.)
+        plt.savefig(os.path.join(plot_path, "{}.png".format(ii)))
+
+        # XZ orbit
         plt.clf()
         plt.title(r"$R$={}, $\dot{{R}}$={}".format(w0[0], w0[2]))
         plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
