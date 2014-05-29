@@ -198,7 +198,6 @@ def main(mpi=False, overwrite=False):
 
 
 if __name__ == "__main__":
-    if __name__ == "__main__":
     from argparse import ArgumentParser
 
     # Define parser object
@@ -213,5 +212,13 @@ if __name__ == "__main__":
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
+
+    args = parser.parse_args()
+
+    # Set logger level based on verbose flags
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    elif args.quiet:
+        logger.setLevel(logging.ERROR)
 
     main(mpi=args.mpi, overwrite=args.overwrite)
