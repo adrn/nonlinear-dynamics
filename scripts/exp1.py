@@ -75,7 +75,7 @@ def w0_from_grid(E, potential_params, R, Rdot):
     zdot = np.sqrt(2*(E-V) - Rdot**2)
     return np.vstack((R,z,Rdot,zdot)).T
 
-def plot_rotation_curve(potential_params):
+def plot_rotation_curve(potential_params, plot_path=""):
     # rotation curve stuff
     logger.info((rotation_curve(8., **potential_params)*u.kpc/u.Myr).to(u.km/u.s).value)
 
@@ -118,7 +118,7 @@ def main(pool, overwrite=False):
     potential_params['q'] = 0.8
 
     # plot the rotation curve for this potential
-    plot_rotation_curve(potential_params)
+    plot_rotation_curve(potential_params, plot_path=plot_path)
 
     # integration shite
     dt = 10.
