@@ -89,10 +89,10 @@ def variational_acceleration(X, Lz, Md, a, b, Mn, c, Mh, Rs, q):
 
     d2V_dz2 = -G*Md*z**2*(a + np.sqrt(b**2 + z**2))/((R**2 + (a + np.sqrt(b**2 + z**2))**2)**1.5*(b**2 + z**2)**1.5) + G*Md*z**2/((R**2 + (a + np.sqrt(b**2 + z**2))**2)**1.5*(b**2 + z**2)) - 3*G*Md*z**2*(a + np.sqrt(b**2 + z**2))**2/((R**2 + (a + np.sqrt(b**2 + z**2))**2)**2.5*(b**2 + z**2)) + G*Md*(a + np.sqrt(b**2 + z**2))/((R**2 + (a + np.sqrt(b**2 + z**2))**2)**1.5*np.sqrt(b**2 + z**2)) - 3*G*Mn*z**2/(R**2 + c**2 + z**2)**2.5 + G*Mn/(R**2 + c**2 + z**2)**1.5
 
-    ddR = -((d2V_dR2 + 3*Lz**2/R**4)*dR + d2V_dRdz*dz)
-    ddz = -(d2V_dRdz*dR + d2V_dz2*dz)
+    ddR = (d2V_dR2 + 3*Lz**2/R**4)*dR + d2V_dRdz*dz
+    ddz = d2V_dRdz*dR + d2V_dz2*dz
 
-    return np.array([ddR, ddz]).T
+    return -np.array([ddR, ddz]).T
 
 def rotation_curve(R, Md, a, b, Mn, c, Mh, Rs, q):
     z = np.zeros_like(R)
