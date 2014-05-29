@@ -17,6 +17,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 # Standard library
 import os, sys
 import logging
+import shutil
 
 # Third-party
 import cubehelix
@@ -93,6 +94,8 @@ def main(pool, overwrite=False):
     project_path = os.path.split(os.environ['STREAMSPATH'])[0]
     output_path = os.path.join(project_path, "nonlinear-dynamics", "output")
     path = os.path.join(output_path, name)
+    if os.path.exists(path) and overwrite:
+        shutil.rmtree(path)
 
     plot_path = os.path.join(path, "plots")
     if not os.path.exists(plot_path):
