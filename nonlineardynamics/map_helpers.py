@@ -98,6 +98,8 @@ class LyapunovMap(object):
         if self.w0 is None and self.potential_pars is not None:
             # assume arg is (index, w0)
             index,w0 = arg
+            logger.debug("Index: {}".format(index))
+            logger.debug("ICs: {}".format(w0))
             return self._map_helper(w0, self.potential_pars,
                                     filename="{}.hdf5".format(index))
 
