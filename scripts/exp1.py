@@ -87,7 +87,7 @@ def plot_rotation_curve(potential_params, plot_path=""):
     plt.ylabel("V [km/s]")
     plt.savefig(os.path.join(plot_path, "rotation_curve.png"))
 
-def main(pool, overwrite=False):
+def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
     # set the name here
     name = "nfw"
 
@@ -123,17 +123,13 @@ def main(pool, overwrite=False):
     # plot the rotation curve for this potential
     plot_rotation_curve(potential_params, plot_path=plot_path)
 
-    # integration shite
-    dt = 10.
-    nsteps = 1000
-
     # energy, angular momentum
     E = (-2000*100*(u.km/u.s)**2).decompose(usys).value
     Lz = (180.*10.*u.km*u.kpc/u.s).decompose(usys).value
     potential_params['Lz'] = Lz
 
     # generate a grid of R, Rdot
-    R,Rdot = R_Rdot_grid(E, potential_params, nR=5, nRdot=5)
+    R,Rdot = R_Rdot_grid(E, potential_params, nR=ngrid, nRdot=ngrid)
     w0s = w0_from_grid(E, potential_params, R, Rdot)
     gridsize = len(w0s)
 
@@ -212,9 +208,18 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
                         default=False, help="Overwrite cached files.")
 
+    parser.add_argument("--ngrid", dest="ngrid", required=True,
+                        help="Number of grid points along R and Rdot.")
+
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
                         help="Run with MPI.")
+
+    # pass to lyapunov
+    parser.add_argument("--nsteps", dest="nsteps", default=100000, type=int,
+                        help="Number of steps.")
+    parser.add_argument("--dt", dest="dt", default=1., type=float,
+                        help="Timestep.")
 
     args = parser.parse_args()
 
@@ -225,4 +230,5 @@ if __name__ == "__main__":
         logger.setLevel(logging.ERROR)
 
     pool = get_pool(mpi=args.mpi)
-    main(pool=pool, overwrite=args.overwrite)
+    main(pool=pool, overwrite=args.overwrite, ngrid=args.ngrid,
+         nsteps=args.nsteps, dt=args.dt)
