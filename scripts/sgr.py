@@ -224,6 +224,8 @@ mpiexec -n 4 /vega/astro/users/amp2217/anaconda/bin/python /vega/astro/users/amp
 # LAPTOP
 python scripts/sgr.py -v --xparam q1 2 0.7 1.8 --yparam qz 2 0.7 1.8 --nsteps=1000 --dt=5. --prefix=/Users/adrian/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators
 
+python scripts/sgr.py -v --xparam q1 1 1.38 2. --yparam qz 11 1.26 1.46 --nsteps=10000 --dt=5. --prefix=/Users/adrian/projects/nonlinear-dynamics/output/sgr --plot-orbits --plot-indicators
+
 # DEIMOS
 python scripts/sgr.py -v --xparam q1 5 0.7 1.8 --yparam qz 5 0.7 1.8 --nsteps=1000 --dt=1. --prefix=/home/adrian/projects/nonlinear-dynamics/output/sgr --plot-orbits
 
