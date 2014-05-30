@@ -25,6 +25,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import root, minimize
+import scipy.optimize as so
 import astropy.units as u
 from astropy.constants import G
 from astropy import log as logger
@@ -42,8 +43,8 @@ def R_Rdot_grid(E, potential_params, nR=10, nRdot=10):
 
     # find the min and max allowed R values
     f = lambda R: E - effective_potential(np.array([R,0.,0.,0.]),**potential_params)
-    res1 = root(f, x0=1.)
-    res2 = root(f, x0=100.)
+    res1 = root(f, x0=1., options={'xtol': 1e-8}, tol=1e-8)
+    res2 = root(f, x0=50., options={'xtol': 1e-8}, tol=1e-8)
 
     if not (res1.success and res2.success):
         raise ValueError("R Root finding failed.")
@@ -124,14 +125,13 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
     plot_rotation_curve(potential_params, plot_path=plot_path)
 
     # energy, angular momentum
-    E = (-2000*100*(u.km/u.s)**2).decompose(usys).value
-    Lz = (150.*10.*u.km*u.kpc/u.s).decompose(usys).value
+    Lz = (75.*10.*u.km*u.kpc/u.s).decompose(usys).value
     potential_params['Lz'] = Lz
+    E = effective_potential(np.array([50.,0.,0.,0.]),**potential_params) # R_max = 50 kpc
 
     # generate a grid of R, Rdot
     R,Rdot = R_Rdot_grid(E, potential_params, nR=ngrid, nRdot=ngrid)
     w0s = w0_from_grid(E, potential_params, R, Rdot)
-    # w0s = np.array([[19.61443808,0.,0.,0.25824497]]) # HACK
     gridsize = len(w0s)
 
     # grid of IC's
@@ -188,9 +188,6 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
         plt.savefig(os.path.join(plot_path, "lyap_{}.png".format(ii)))
 
     return
-
-    plt.plot(ws[...,0], ws[...,1], marker=None)
-    plt.show()
 
     # plt.plot(R_zvc, Rdot_zvc, marker=None)
     # plt.plot(ws[...,0], ws[...,2], marker=None)
