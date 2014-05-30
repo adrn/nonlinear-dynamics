@@ -182,14 +182,22 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
 
         # XZ orbit
         plt.clf()
-        plt.title(r"$R$={}, $\dot{{R}}$={}".format(w0[0], w0[2]))
-        plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
-        plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
+        # plt.title(r"$R$={}, $\dot{{R}}$={}".format(w0[0], w0[2]))
+        # plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
+        # plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
 
-        plt.plot(w[...,0], w[...,1], marker=None)
-        plt.xlim(0., 85.)
-        plt.ylim(-45., 45.)
-        plt.savefig(os.path.join(plot_path, "{}.png".format(ii)))
+        R,z = w[...,:2].T
+        phi = Lz*t
+        x = R*np.cos(phi)
+        y = R*np.sin(phi)
+
+        plt.plot(x, z, marker=None)
+        plt.show()
+        sys.exit(0)
+        #plt.plot(w[...,0], w[...,1], marker=None)
+        #plt.xlim(0., 85.)
+        #plt.ylim(-45., 45.)
+        plt.savefig(os.path.join(plot_path, "xz_{}.png".format(ii)))
 
         # lyapunov exponents
         plt.clf()
