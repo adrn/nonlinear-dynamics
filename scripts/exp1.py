@@ -51,7 +51,7 @@ def R_Rdot_grid(E, potential_params, nR=10, nRdot=10):
     minR = res1.x[0] + res1.x[0]/100.
     maxR = res2.x[0] - res2.x[0]/100.
     R_grid = np.linspace(minR, maxR, nR)
-    print(minR, maxR)
+    logger.info("Min, max R for grid: {},{}".format(minR, maxR))
 
     # now find the max allowed Rdot
     zvc = lambda R: -np.sqrt(2*(E - effective_potential(np.array([R,0.,0.,0.]), **potential_params)))
@@ -125,7 +125,7 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
 
     # energy, angular momentum
     E = (-2000*100*(u.km/u.s)**2).decompose(usys).value
-    Lz = (180.*10.*u.km*u.kpc/u.s).decompose(usys).value
+    Lz = (150.*10.*u.km*u.kpc/u.s).decompose(usys).value
     potential_params['Lz'] = Lz
 
     # generate a grid of R, Rdot
@@ -161,13 +161,13 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
         # estimate lyapunov time from final step
         max_idx = lyap.sum(axis=0).argmax()
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
-        print(t_lyap[-100:].mean())
-        print(t_lyap.min())
-        print()
+        # print(t_lyap[-100:].mean())
+        # print(t_lyap.min())
+        # print()
 
         # pericenter and apocenter
         r = np.sqrt(w[...,0]**2 + w[...,1]**2)
-        print(r.min(), r.max())
+        logger.debug("Peri: {}, Apo: {}".format(r.min(), r.max()))
 
         # orbit
         plt.clf()
