@@ -136,7 +136,7 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
 
     # grid of IC's
     plt.clf()
-    plt.plot(R,Rdot,linestyle='none')
+    plt.plot(R,Rdot,linestyle='none',marker='o')
     plt.savefig(os.path.join(plot_path, "ic_grid.png"))
 
     kwargs = dict(nsteps=nsteps, dt=dt)
@@ -149,8 +149,8 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
     pool.close()
 
     fig = plt.figure(figsize=(10,10))
-    chaotic = np.zeros(gridsize).astype(bool)
-    dm = np.zeros(gridsize)
+    #chaotic = np.zeros(gridsize).astype(bool)
+    end_lyaps = np.zeros(gridsize)
     for r in lm.iterate_cache():
         lyap, t, w, pp, fname = r
         w0 = w[0]
@@ -161,6 +161,7 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
         # estimate lyapunov time from final step
         max_idx = lyap.sum(axis=0).argmax()
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
+        end_lyaps[ii] = np.median(t_lyap[-100:])
         # print(t_lyap[-100:].mean())
         # print(t_lyap.min())
         # print()
@@ -186,6 +187,12 @@ def main(pool, ngrid, nsteps=5000, dt=10., overwrite=False):
         plt.xlim(t[1], t[-1])
         plt.ylim(1E-5, 1.)
         plt.savefig(os.path.join(plot_path, "lyap_{}.png".format(ii)))
+
+    # grid of IC's
+    plt.clf()
+    plt.scatter(R,Rdot,c=end_lyaps,linestyle='none',marker='o')
+    plt.colorbar()
+    plt.savefig(os.path.join(plot_path, "ic_grid_color.png"))
 
     return
 
