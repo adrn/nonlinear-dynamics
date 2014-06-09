@@ -41,7 +41,7 @@ from nonlineardynamics import LyapunovMap
 # phase-space position of Sgr today in the MW
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
-def main(pool, overwrite=False, nsteps=None, dt=None):
+def main(pool, overwrite=False, nsteps=None, dt=None, ngrid=None):
     # set the name here
     name = "exp2"
 
@@ -71,8 +71,7 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
 
     # generate initial conditions
     w0s = []
-    N = 25
-    azis = np.linspace(0,90,N)*u.deg
+    azis = np.linspace(0,180,ngrid)*u.deg
     for alt,azi in zip(np.zeros(N)*u.deg,azis):
         R_alt = rotation_matrix(-alt, "y")
         R_azi = rotation_matrix(azi, "z")
@@ -90,13 +89,12 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
     lm.potential_pars = nfw.vl2_params.items()
 
     # get a pool to use map()
-    gridsize = len(w0s)
-    pool.map(lm, list(zip(np.arange(gridsize),w0s)))
+    pool.map(lm, list(zip(np.arange(ngrid),w0s)))
     pool.close()
 
     fig = plt.figure(figsize=(10,10))
-    #chaotic = np.zeros(gridsize).astype(bool)
-    #end_lyaps = np.zeros(gridsize)
+    #chaotic = np.zeros(ngrid).astype(bool)
+    #end_lyaps = np.zeros(ngrid)
     for r in lm.iterate_cache():
         lyap, t, w, pp, fname = r
         w0 = w[0]
@@ -154,8 +152,8 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
                         default=False, help="Overwrite cached files.")
 
-    # parser.add_argument("--ngrid", dest="ngrid", required=True,
-    #                     help="Number of grid points along R and Rdot.")
+    parser.add_argument("--ngrid", dest="ngrid", required=True,
+                        help="Number of grid points along R and Rdot.")
 
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
@@ -176,4 +174,5 @@ if __name__ == "__main__":
         logger.setLevel(logging.ERROR)
 
     pool = get_pool(mpi=args.mpi)
-    main(pool=pool, overwrite=args.overwrite, nsteps=args.nsteps, dt=args.dt)
+    main(pool=pool, overwrite=args.overwrite, nsteps=args.nsteps,
+         dt=args.dt, ngrid=args.ngrid)
