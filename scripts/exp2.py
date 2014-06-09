@@ -72,7 +72,8 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
     # generate initial conditions
     w0s = []
     N = 25
-    for alt,azi in zip(np.zeros(N)*u.deg,np.linspace(0,90,N)*u.deg):
+    azis = np.linspace(0,90,N)*u.deg
+    for alt,azi in zip(np.zeros(N)*u.deg,azis):
         R_alt = rotation_matrix(-alt, "y")
         R_azi = rotation_matrix(azi, "z")
         r_rot = np.array(r.dot(R_alt).dot(R_azi))
@@ -106,6 +107,7 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
         # estimate lyapunov time from final step
         max_idx = lyap.sum(axis=0).argmax()
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
+        logger.debug("t_lyap = {}".format(t_lyap))
         #end_lyaps[ii] = np.median(t_lyap[-100:])
         # print(t_lyap[-100:].mean())
         # print(t_lyap.min())
@@ -116,9 +118,9 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
         logger.debug("Peri: {}, Apo: {}".format(r.min(), r.max()))
 
         # orbit
-        plt.clf()
-        plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
-        plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
+        # plt.clf()
+        # plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
+        # plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
 
         fig,axes = plt.subplots(2,2,figsize=(10,10),sharex=True,sharey=True)
         axes[0,0].plot(w[:,0], w[:,1], marker=None)
@@ -128,7 +130,9 @@ def main(pool, overwrite=False, nsteps=None, dt=None):
         axes[1,1].plot(w[:,1], w[:,2], marker=None)
         axes[1,1].set_xlim(-50,50)
         axes[1,1].set_ylim(-50,50)
+        fig.suptitle(r"$\phi$={:.2f}".format(azis[ii].to(u.degree).value))
         fig.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
+        plt.close('all')
 
         # lyapunov exponents
         plt.clf()
