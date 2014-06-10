@@ -41,10 +41,7 @@ from nonlineardynamics import LyapunovMap
 # phase-space position of Sgr today in the MW
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
-def main(pool, overwrite=False, nsteps=None, dt=None, ngrid=None):
-    # set the name here
-    name = "exp2"
-
+def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     # ----------------------------------------------------------------------
     # Don't remove or change this stuff
     project_path = os.path.split(os.environ['STREAMSPATH'])[0]
@@ -71,8 +68,9 @@ def main(pool, overwrite=False, nsteps=None, dt=None, ngrid=None):
 
     # generate initial conditions
     w0s = []
+    alts = (np.zeros(ngrid) + 15.)*u.deg
     azis = np.linspace(0,180,ngrid)*u.deg
-    for alt,azi in zip(np.zeros(ngrid)*u.deg,azis):
+    for alt,azi in zip(alts,azis):
         R_alt = rotation_matrix(-alt, "y")
         R_azi = rotation_matrix(azi, "z")
         r_rot = np.array(r.dot(R_alt).dot(R_azi))
@@ -154,6 +152,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--ngrid", dest="ngrid", required=True, type=int,
                         help="Number of grid points along R and Rdot.")
+    parser.add_argument("--name", dest="name", type=str, default="exp2")
 
     # threading
     parser.add_argument("--mpi", dest="mpi", default=False, action="store_true",
@@ -174,5 +173,5 @@ if __name__ == "__main__":
         logger.setLevel(logging.ERROR)
 
     pool = get_pool(mpi=args.mpi)
-    main(pool=pool, overwrite=args.overwrite, nsteps=args.nsteps,
-         dt=args.dt, ngrid=args.ngrid)
+    main(pool=pool, name=args.name, overwrite=args.overwrite,
+         nsteps=args.nsteps, dt=args.dt, ngrid=args.ngrid)
