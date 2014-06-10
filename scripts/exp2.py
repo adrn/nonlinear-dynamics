@@ -127,7 +127,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         axes[1,1].set_xlim(-50,50)
         axes[1,1].set_ylim(-50,50)
         fig.suptitle(r"$\phi$={:.2f}".format(azis[ii].to(u.degree).value))
-        fig.savefig(os.path.join(plot_path,'orbit_{}.png'.format(ii)))
+        fig.savefig(os.path.join(plot_path,'orbit_{:03d}.png'.format(ii)))
         plt.close('all')
 
         # lyapunov exponents
@@ -135,7 +135,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         plt.loglog(t, lyap, marker=None)
         plt.xlim(t[1], t[-1])
         plt.ylim(1E-5, 1.)
-        plt.savefig(os.path.join(plot_path, "lyap_{}.png".format(ii)))
+        plt.savefig(os.path.join(plot_path, "lyap_{:03d}.png".format(ii)))
 
 
 if __name__ == "__main__":
