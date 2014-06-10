@@ -72,7 +72,7 @@ def main(pool, overwrite=False, nsteps=None, dt=None, ngrid=None):
     # generate initial conditions
     w0s = []
     azis = np.linspace(0,180,ngrid)*u.deg
-    for alt,azi in zip(np.zeros(N)*u.deg,azis):
+    for alt,azi in zip(np.zeros(ngrid)*u.deg,azis):
         R_alt = rotation_matrix(-alt, "y")
         R_azi = rotation_matrix(azi, "z")
         r_rot = np.array(r.dot(R_alt).dot(R_azi))
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--overwrite", action="store_true", dest="overwrite",
                         default=False, help="Overwrite cached files.")
 
-    parser.add_argument("--ngrid", dest="ngrid", required=True,
+    parser.add_argument("--ngrid", dest="ngrid", required=True, type=int,
                         help="Number of grid points along R and Rdot.")
 
     # threading
