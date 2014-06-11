@@ -101,7 +101,6 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
         logger.debug("t_lyap = {}".format(t_lyap))
         end_lyaps[ii] = np.median(t_lyap[-100:].value)
-        continue
 
         # pericenter and apocenter
         r = np.sqrt(np.sum(w[...,:3]**2,axis=-1))
