@@ -20,11 +20,9 @@ import shutil
 
 # Third-party
 import cubehelix
-from matplotlib import animation
+from matplotlib import cm
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.optimize import root, minimize
-import scipy.optimize as so
 import astropy.units as u
 from astropy.constants import G
 from astropy import log as logger
@@ -62,17 +60,16 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     r = np.array([20.,0,0])
     v = np.array([0.075,0.,0.125])
 
-    # # altitude and azimuth
-    # alt = 0.*u.deg
-    # azi = 45.*u.deg
-
-    # generate initial conditions
+    # generate initial conditions, uniform over 2 angles
     w0s = []
-    alts = (np.zeros(ngrid) + 15.)*u.deg
-    azis = np.linspace(0,180,ngrid)*u.deg
-    for alt,azi in zip(alts,azis):
-        R_alt = rotation_matrix(-alt, "y")
-        R_azi = rotation_matrix(azi, "z")
+    phis = np.linspace(0,90.,ngrid)*u.deg
+    thetas = np.arccos(np.linspace(0.,1.,ngrid))*u.rad
+    phis,thetas = np.meshgrid(phis.to(u.deg), thetas.to(u.deg))
+    phis = phis.ravel()
+    thetas = thetas.ravel()
+    for phi,theta in zip(phis,thetas):
+        R_alt = rotation_matrix(theta-90.*u.deg, "y")
+        R_azi = rotation_matrix(phi, "z")
         r_rot = np.array(r.dot(R_alt).dot(R_azi))
         v_rot = np.array(v.dot(R_alt.T).dot(R_azi.T))
 
@@ -87,12 +84,11 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     lm.potential_pars = nfw.vl2_params.items()
 
     # get a pool to use map()
-    pool.map(lm, list(zip(np.arange(ngrid),w0s)))
+    pool.map(lm, list(zip(np.arange(ngrid*ngrid),w0s)))
     pool.close()
 
     fig = plt.figure(figsize=(10,10))
-    #chaotic = np.zeros(ngrid).astype(bool)
-    #end_lyaps = np.zeros(ngrid)
+    end_lyaps = np.zeros(ngrid*ngrid)
     for r in lm.iterate_cache():
         lyap, t, w, pp, fname = r
         w0 = w[0]
@@ -104,20 +100,16 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         max_idx = lyap.sum(axis=0).argmax()
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
         logger.debug("t_lyap = {}".format(t_lyap))
-        #end_lyaps[ii] = np.median(t_lyap[-100:])
-        # print(t_lyap[-100:].mean())
-        # print(t_lyap.min())
-        # print()
+        end_lyaps[ii] = np.median(t_lyap[-100:].value)
+        continue
 
         # pericenter and apocenter
         r = np.sqrt(np.sum(w[...,:3]**2,axis=-1))
         logger.debug("Peri: {}, Apo: {}".format(r.min(), r.max()))
 
         # orbit
-        # plt.clf()
         # plt.text(2., -35, "End lyap.: {}".format(np.median(t_lyap[-100])))
         # plt.text(2., -40, "Peri: {:.2f}, Apo: {:.2f}".format(r.min(), r.max()))
-
         fig,axes = plt.subplots(2,2,figsize=(10,10),sharex=True,sharey=True)
         axes[0,0].plot(w[:,0], w[:,1], marker=None)
         axes[0,1].plot(w[:,1], w[:,1], marker=None)
@@ -126,7 +118,8 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         axes[1,1].plot(w[:,1], w[:,2], marker=None)
         axes[1,1].set_xlim(-50,50)
         axes[1,1].set_ylim(-50,50)
-        fig.suptitle(r"$\phi$={:.2f}".format(azis[ii].to(u.degree).value))
+        fig.suptitle(r"$\phi$={:.2f}, $\theta$={:.2f}".format(phis[ii].to(u.degree).value,
+                                                              thetas[ii].to(u.degree).value))
         fig.savefig(os.path.join(plot_path,'orbit_{:03d}.png'.format(ii)))
         plt.close('all')
 
@@ -136,6 +129,16 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         plt.xlim(t[1], t[-1])
         plt.ylim(1E-5, 1.)
         plt.savefig(os.path.join(plot_path, "lyap_{:03d}.png".format(ii)))
+
+    # grid of IC's
+    fig,ax = plt.subplots(1,1,figsize=(10,10))
+    s = ax.scatter(phis.to(u.deg).value, thetas.to(u.deg).value,
+                   c=end_lyaps, s=50, cmap=cm.RdYlBu, edgecolor='#444444', linewidth=1.)
+    cbar = fig.colorbar(s, ax=ax)
+    cbar.set_label(r'$t_{\rm lyap}$ [Gyr]')
+    ax.set_xlabel(r"$\phi$ [deg]")
+    ax.set_ylabel(r"$\theta$ [deg]")
+    fig.savefig(os.path.join(plot_path, "0_grid.png"))
 
 
 if __name__ == "__main__":
