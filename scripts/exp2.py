@@ -39,6 +39,19 @@ from nonlineardynamics import LyapunovMap
 # phase-space position of Sgr today in the MW
 sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
 
+def is_box(L):
+    boxy = True
+    for ii in range(3):
+        l = L[:,ii]
+        sign = np.sign(l[0])
+        if sign > 0:
+            box = (l < 0).any()
+        else:
+            box = (l > 0).any()
+
+        boxy = boxy & box
+    return boxy
+
 def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     # ----------------------------------------------------------------------
     # Don't remove or change this stuff
@@ -89,6 +102,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
 
     fig = plt.figure(figsize=(10,10))
     end_lyaps = np.zeros(ngrid*ngrid)
+    box = np.zeros(ngrid*ngrid).astype(bool)
     for r in lm.iterate_cache():
         lyap, t, w, pp, fname = r
         w0 = w[0]
@@ -101,6 +115,13 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
         t_lyap = (1./lyap[:,max_idx]*u.Myr).to(u.Gyr)
         logger.debug("t_lyap = {}".format(t_lyap))
         end_lyaps[ii] = np.median(t_lyap[-100:].value)
+
+        # see if angular momentum changes sign
+        w = np.squeeze(w)
+        r = w[:,:3]
+        v = w[:,3:]
+        L = np.cross(r,v)
+        box[ii] = is_box(L)
 
         # pericenter and apocenter
         r = np.sqrt(np.sum(w[...,:3]**2,axis=-1))
@@ -131,14 +152,26 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
 
     # grid of IC's
     fig,ax = plt.subplots(1,1,figsize=(10,10))
-    s = ax.scatter(phis.to(u.deg).value, thetas.to(u.deg).value,
-                   c=end_lyaps, s=50, cmap=cm.RdYlBu, edgecolor='#444444', linewidth=1.)
+
+    # colored chaotic points
+    ix = end_lyaps < 10. # Gyr
+    s = ax.scatter(phis.to(u.deg).value[ix], thetas.to(u.deg).value[ix],
+                   c=end_lyaps[ix], s=50, cmap=cm.RdYlBu, edgecolor='#444444',
+                   linewidth=1., marker="^")
     cbar = fig.colorbar(s, ax=ax)
     cbar.set_label(r'$t_{\rm lyap}$ [Gyr]')
+
+    # boxy orbits
+    s = ax.scatter(phis.to(u.deg).value[box], thetas.to(u.deg).value[box],
+                   c='k', s=50, marker='s')
+
+    # loop orbits
+    s = ax.scatter(phis.to(u.deg).value[~box], thetas.to(u.deg).value[box],
+                   c='k', s=50, marker='o')
+
     ax.set_xlabel(r"$\phi$ [deg]")
     ax.set_ylabel(r"$\theta$ [deg]")
     fig.savefig(os.path.join(plot_path, "0_grid.png"))
-
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
