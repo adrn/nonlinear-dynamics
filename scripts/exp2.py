@@ -33,7 +33,7 @@ from astropy.coordinates.angles import rotation_matrix
 from streamteam import integrate
 from streamteam.util import get_pool
 from streamteam.dynamics import lyapunov_spectrum
-from nonlineardynamics import nfw
+from nonlineardynamics import nfw_density as nfw
 from nonlineardynamics import LyapunovMap
 
 # phase-space position of Sgr today in the MW
@@ -51,6 +51,20 @@ def is_box(L):
 
         boxy = boxy & box
     return boxy
+
+def rotate_w(w, phi, theta):
+    w = np.atleast_1d(w)
+    if w.ndim > 1:
+        raise ValueError("w must be 1D")
+
+    R_alt = rotation_matrix(theta-90.*u.deg, "y")
+    R_azi = rotation_matrix(phi, "z")
+
+    r = w[:w.size//2]
+    v = w[w.size//2:]
+    r_rot = np.array(r.dot(R_alt).dot(R_azi))
+    v_rot = np.array(v.dot(R_alt.T).dot(R_azi.T))
+    return np.hstack((r_rot, v_rot)).squeeze()
 
 def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     # ----------------------------------------------------------------------
@@ -72,6 +86,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     # similar to Sgr
     r = np.array([20.,0,0])
     v = np.array([0.075,0.,0.125])
+    w0 = np.append(r,v)
 
     # generate initial conditions, uniform over 2 angles
     w0s = []
@@ -81,13 +96,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     phis = phis.ravel()
     thetas = thetas.ravel()
     for phi,theta in zip(phis,thetas):
-        R_alt = rotation_matrix(theta-90.*u.deg, "y")
-        R_azi = rotation_matrix(phi, "z")
-        r_rot = np.array(r.dot(R_alt).dot(R_azi))
-        v_rot = np.array(v.dot(R_alt.T).dot(R_azi.T))
-
-        w0 = np.hstack((r_rot, v_rot)).squeeze()
-        w0s.append(w0.tolist())
+        w0s.append(rotate_w(w0, phi, theta).squeeze().tolist())
     w0s = np.array(w0s)
 
     kwargs = dict(nsteps=nsteps, dt=dt)
