@@ -165,17 +165,19 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
     # colored chaotic points
     ix = end_lyaps < 10. # Gyr
     s = ax.scatter(phis.to(u.deg).value[ix], thetas.to(u.deg).value[ix],
-                   c=end_lyaps[ix], s=50, cmap=cm.RdYlBu, edgecolor='#444444',
+                   c=end_lyaps[ix], s=80, cmap=cm.RdYlBu, edgecolor='#444444',
                    linewidth=1., marker="^")
     cbar = fig.colorbar(s, ax=ax)
     cbar.set_label(r'$t_{\rm lyap}$ [Gyr]')
 
     # boxy orbits
-    s = ax.scatter(phis.to(u.deg).value[box], thetas.to(u.deg).value[box],
+    s = ax.scatter(phis.to(u.deg).value[box & (~ix)],
+                   thetas.to(u.deg).value[box & (~ix)],
                    c='k', s=50, marker='s')
 
     # loop orbits
-    s = ax.scatter(phis.to(u.deg).value[~box], thetas.to(u.deg).value[~box],
+    s = ax.scatter(phis.to(u.deg).value[(~box) & (~ix)],
+                   thetas.to(u.deg).value[(~box) & (~ix)],
                    c='k', s=50, marker='o')
 
     ax.set_xlabel(r"$\phi$ [deg]")
