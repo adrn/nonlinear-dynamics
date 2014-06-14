@@ -175,7 +175,7 @@ def main(pool, name="exp2", overwrite=False, nsteps=None, dt=None, ngrid=None):
                    c='k', s=50, marker='s')
 
     # loop orbits
-    s = ax.scatter(phis.to(u.deg).value[~box], thetas.to(u.deg).value[box],
+    s = ax.scatter(phis.to(u.deg).value[~box], thetas.to(u.deg).value[~box],
                    c='k', s=50, marker='o')
 
     ax.set_xlabel(r"$\phi$ [deg]")
