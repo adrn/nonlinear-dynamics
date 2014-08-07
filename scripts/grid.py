@@ -128,7 +128,15 @@ def main(mpi=False):
     theta = t.ravel()
     phi = p.ravel()
 
-    box_fracs = pool.map(bork, zip(phi, theta))
+    angles = []
+    for t,p in zip(theta,phi):
+        fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
+        if os.path.exists(fn):
+            logger.debug("'{}' exists...skipping".format(fn))
+            continue
+        angles.append((p,t))
+
+    box_fracs = pool.map(bork, angles)
     pool.close()
 
     fn = os.path.join(plot_path, "box_fracs.npy")
