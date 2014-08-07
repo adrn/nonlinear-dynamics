@@ -121,8 +121,8 @@ def main(mpi=False):
     if not os.path.exists(plot_path):
         os.makedirs(plot_path)
 
-    theta = np.arccos(1. - 2*np.linspace(0.01,0.99,15))
-    phi = np.linspace(0., np.pi/2., 15)
+    theta = np.arccos(1. - np.linspace(0.01,1.,15))
+    phi = np.linspace(0.01, 0.99*np.pi/2., 15)
 
     t,p = np.meshgrid(theta, phi)
     theta = t.ravel()
