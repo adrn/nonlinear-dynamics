@@ -25,7 +25,7 @@ from streamteam.util import get_pool
 
 usys = (u.kpc, u.Myr, u.radian, u.Msun)
 # plot_path = "output/planes"
-plot_path = "/hpc/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
+plot_path = "/hpc/astrostats/astro/users/amp2217/planes"
 
 def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
 
@@ -130,7 +130,7 @@ def main(mpi=False):
 
     angles = []
     for t,p in zip(theta,phi):
-        fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
+        fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(p,t))
         if os.path.exists(fn):
             logger.debug("'{}' exists...skipping".format(fn))
             continue
