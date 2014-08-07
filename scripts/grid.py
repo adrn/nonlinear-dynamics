@@ -98,19 +98,25 @@ def bork(angles):
     t,ws = integrator.run(w0, dt=1., nsteps=15000)
     logger.debug("Took {} seconds to integrate.".format(time.time() - a))
 
+    fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
+    np.save(fn, ws)
+
     orb = sd.classify_orbit(ws)
     is_loop = np.any(orb, axis=1).astype(bool)
     is_box = np.logical_not(is_loop)
-    logger.info("Fraction of box orbits: {}".format(is_box.sum() / float(len(is_loop))))
+    box_frac = is_box.sum() / float(len(is_loop))
+    logger.info("Fraction of box orbits: {}".format(box_frac))
+
+    return phi,theta,box_frac
 
     # plot grid of ICs, classified
-    plt.figure(figsize=(12,12))
-    plt.scatter(r[is_box], r_dot[is_box], marker='s', c='#d7191c')
-    plt.scatter(r[is_loop], r_dot[is_loop], marker='o',
-                facecolors='none', edgecolors='#1a9641')
-    plt.xlim(r.min(),r.max())
-    plt.ylim(r_dot.min(),r_dot.max())
-    plt.savefig(os.path.join(plot_path, "phi{}_theta{}.png".format(phi,theta)))
+    # plt.figure(figsize=(12,12))
+    # plt.scatter(r[is_box], r_dot[is_box], marker='s', c='#d7191c')
+    # plt.scatter(r[is_loop], r_dot[is_loop], marker='o',
+    #             facecolors='none', edgecolors='#1a9641')
+    # plt.xlim(r.min(),r.max())
+    # plt.ylim(r_dot.min(),r_dot.max())
+    # plt.savefig(os.path.join(plot_path, "phi{}_theta{}.png".format(phi,theta)))
 
 def main(mpi=False):
     pool = get_pool(mpi=mpi)
@@ -122,9 +128,12 @@ def main(mpi=False):
     theta = t.ravel()
     phi = p.ravel()
 
-    pool.map(bork, zip(phi, theta))
-
+    box_fracs = pool.map(bork, zip(phi, theta))
     pool.close()
+
+    fn = os.path.join(plot_path, "box_fracs.npy")
+    np.save(fn, box_fracs)
+
     sys.exit(0)
 
 if __name__ == "__main__":
