@@ -27,9 +27,6 @@ usys = (u.kpc, u.Myr, u.radian, u.Msun)
 # plot_path = "output/planes"
 plot_path = "/hpc/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
 
-if not os.path.exists(plot_path):
-    os.makedirs(plot_path)
-
 def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
 
     x = r*np.cos(phi)*np.sin(theta)
@@ -120,6 +117,9 @@ def bork(angles):
 
 def main(mpi=False):
     pool = get_pool(mpi=mpi)
+
+    if not os.path.exists(plot_path):
+        os.makedirs(plot_path)
 
     theta = np.arccos(1. - 2*np.linspace(0.01,0.99,15))
     phi = np.linspace(0., np.pi/2., 15)
