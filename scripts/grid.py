@@ -17,12 +17,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Project
+
 from streamteam.potential.lm10 import LM10Potential
 import streamteam.integrate as si
 import streamteam.dynamics as sd
+from streamteam.util import get_pool
 
 usys = (u.kpc, u.Myr, u.radian, u.Msun)
-plot_path = "output/planes"
+# plot_path = "output/planes"
+plot_path = "/hpc/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
 
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
@@ -57,7 +60,9 @@ def grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot):
 
     return ics
 
-def bork(phi, theta):
+def bork(angles):
+    phi, theta = angles
+
     # take energy from Sgr orbit
     sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
     sgr_pot = LM10Potential()
@@ -67,8 +72,8 @@ def bork(phi, theta):
     phi_dot = 0.
 
     # make a grid in r, r_dot
-    _r = np.arange(10., 100., 1.)
-    _r_dot = (np.arange(-600., 600., 25.)*u.km/u.s).decompose(usys).value
+    _r = np.arange(10., 100., 0.5)
+    _r_dot = (np.arange(-600., 600., 15.)*u.km/u.s).decompose(usys).value
     r,r_dot = np.meshgrid(_r,_r_dot)
 
     # potential = sgr_pot # HACK
@@ -76,10 +81,10 @@ def bork(phi, theta):
     r,r_dot,theta_dot = filter_grid(E, r.ravel(), r_dot.ravel(), phi, phi_dot, theta, potential)
 
     # plot grid of ICs
-    fig,ax = plt.subplots(1,1,figsize=(10,10))
-    cax = ax.scatter(r, r_dot, marker='o', c=np.log(theta_dot))
-    fig.colorbar(cax)
-    fig.savefig(os.path.join(plot_path, "ic_grid.png"))
+    # fig,ax = plt.subplots(1,1,figsize=(10,10))
+    # cax = ax.scatter(r, r_dot, marker='o', c=np.log(theta_dot))
+    # fig.colorbar(cax)
+    # fig.savefig(os.path.join(plot_path, "ic_grid.png"))
 
     # turn the grid into an array of initial conditions
     w0 = grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot)
@@ -90,8 +95,8 @@ def bork(phi, theta):
 
     # define initial conditions for Sgr orbit (x,y,z,vx,vy,vz)
     a = time.time()
-    t,ws = integrator.run(w0, dt=1., nsteps=10000)
-    logger.info("Took {} seconds to integrate.".format(time.time() - a))
+    t,ws = integrator.run(w0, dt=1., nsteps=15000)
+    logger.debug("Took {} seconds to integrate.".format(time.time() - a))
 
     orb = sd.classify_orbit(ws)
     is_loop = np.any(orb, axis=1).astype(bool)
@@ -107,10 +112,20 @@ def bork(phi, theta):
     plt.ylim(r_dot.min(),r_dot.max())
     plt.savefig(os.path.join(plot_path, "phi{}_theta{}.png".format(phi,theta)))
 
-def main():
+def main(mpi=False):
+    pool = get_pool(mpi=mpi)
 
-    for phi in np.linspace(0., np.pi/2., 15.):
-        bork(phi, np.pi/2.)
+    theta = np.arccos(1. - 2*np.linspace(0.01,0.99,15))
+    phi = np.linspace(0., np.pi/2., 15)
+
+    t,p = np.meshgrid(theta, phi)
+    theta = t.ravel()
+    phi = p.ravel()
+
+    pool.map(bork, zip(phi, theta))
+
+    pool.close()
+    sys.exit(0)
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -122,6 +137,8 @@ if __name__ == "__main__":
                         default=False, help="Be chatty! (default = False)")
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet",
                         default=False, help="Be quiet! (default = False)")
+    parser.add_argument("--mpi", dest="mpi", action="store_true", default=False,
+                        help="Run with MPI.")
 
     args = parser.parse_args()
 
@@ -133,4 +150,4 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
-    main()
+    main(mpi=args.mpi)
