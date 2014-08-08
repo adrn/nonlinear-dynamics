@@ -19,13 +19,14 @@ import numpy as np
 # Project
 
 from streamteam.potential.lm10 import LM10Potential
+from streamteam.potential.apw import PW14Potential
 import streamteam.integrate as si
 import streamteam.dynamics as sd
 from streamteam.util import get_pool
 
 usys = (u.kpc, u.Myr, u.radian, u.Msun)
-# plot_path = "output/planes"
-plot_path = "/hpc/astrostats/astro/users/amp2217/planes"
+plot_path = "output/planes"
+# plot_path = "/hpc/astrostats/astro/users/amp2217/planes"
 
 def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
 
@@ -33,9 +34,10 @@ def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
     y = r*np.sin(phi)*np.sin(theta)
     z = r*np.cos(theta)
 
-    theta_dot = np.sqrt(2*(E - potential.value(np.array([x,y,z]).T))/r**2 - (r_dot/r)**2)
-    r_dot_max = np.sqrt(2*(E - potential.value(np.array([x,y,z]).T)))
-    r_dot_min = -np.sqrt(2*(E - potential.value(np.array([x,y,z]).T)))
+    xyz = np.array([x,y,z]).T.copy()
+    theta_dot = np.sqrt(2*(E - potential.value(xyz))/r**2 - (r_dot/r)**2)
+    r_dot_max = np.sqrt(2*(E - potential.value(xyz)))
+    r_dot_min = -np.sqrt(2*(E - potential.value(xyz)))
 
     ix = (r_dot > r_dot_min) & (r_dot < r_dot_max) & (~np.isnan(theta_dot))
 
@@ -58,30 +60,31 @@ def grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot):
     return ics
 
 def bork(angles):
-    phi, theta = angles
+    phi,theta = angles
 
     # take energy from Sgr orbit
     sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
     sgr_pot = LM10Potential()
     E = sgr_pot.value(sgr_w[:3]) + 0.5*np.sum(sgr_w[3:]**2)
+    E = -0.11150041
 
     # arbitrarily set phi_dot = 0
     phi_dot = 0.
 
     # make a grid in r, r_dot
-    _r = np.arange(10., 100., 0.5)
+    _r = np.arange(10., 200., 0.5)
     _r_dot = (np.arange(-600., 600., 15.)*u.km/u.s).decompose(usys).value
     r,r_dot = np.meshgrid(_r,_r_dot)
 
-    # potential = sgr_pot # HACK
-    potential = LM10Potential(q1=1.4, q2=1., q3=0.8, phi=0.)
+    # potential = LM10Potential(q1=1.4, q2=1., q3=0.8, phi=0.)
+    potential = PW14Potential()
     r,r_dot,theta_dot = filter_grid(E, r.ravel(), r_dot.ravel(), phi, phi_dot, theta, potential)
 
     # plot grid of ICs
     # fig,ax = plt.subplots(1,1,figsize=(10,10))
     # cax = ax.scatter(r, r_dot, marker='o', c=np.log(theta_dot))
     # fig.colorbar(cax)
-    # fig.savefig(os.path.join(plot_path, "ic_grid.png"))
+    # fig.savefig(os.path.join(plot_path, "ic_grid_phi{}_theta{}.png".format(phi,theta)))
 
     # turn the grid into an array of initial conditions
     w0 = grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot)
