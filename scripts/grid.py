@@ -64,44 +64,49 @@ def grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot):
 def bork(angles):
     phi,theta = angles
 
-    # take energy from Sgr orbit
-    sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
-    sgr_pot = LM10Potential()
-    E = sgr_pot.value(sgr_w[:3]) + 0.5*np.sum(sgr_w[3:]**2)
-    E = -0.11150041
-
-    # arbitrarily set phi_dot = 0
-    phi_dot = 0.
-
-    # make a grid in r, r_dot
-    _r = np.arange(10., 200., 0.5)
-    _r_dot = (np.arange(-600., 600., 15.)*u.km/u.s).decompose(usys).value
-    r,r_dot = np.meshgrid(_r,_r_dot)
-
-    # potential = LM10Potential(q1=1.4, q2=1., q3=0.8, phi=0.)
-    potential = PW14Potential()
-    r,r_dot,theta_dot = filter_grid(E, r.ravel(), r_dot.ravel(), phi, phi_dot, theta, potential)
-
-    # plot grid of ICs
-    # fig,ax = plt.subplots(1,1,figsize=(10,10))
-    # cax = ax.scatter(r, r_dot, marker='o', c=np.log(theta_dot))
-    # fig.colorbar(cax)
-    # fig.savefig(os.path.join(plot_path, "ic_grid_phi{}_theta{}.png".format(phi,theta)))
-
-    # turn the grid into an array of initial conditions
-    w0 = grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot)
-    logger.debug("Shape of ICs: {}".format(w0.shape))
-
-    # integrate all the ICs
-    integrator = si.LeapfrogIntegrator(lambda t, *args: potential.acceleration(*args))
-
-    # define initial conditions for Sgr orbit (x,y,z,vx,vy,vz)
-    a = time.time()
-    t,ws = integrator.run(w0, dt=1., nsteps=15000)
-    logger.debug("Took {} seconds to integrate.".format(time.time() - a))
-
     fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
-    np.save(fn, ws)
+
+    if not os.path.exists(fn):
+
+        # take energy from Sgr orbit
+        sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
+        sgr_pot = LM10Potential()
+        E = sgr_pot.value(sgr_w[:3]) + 0.5*np.sum(sgr_w[3:]**2)
+        E = -0.11150041
+
+        # arbitrarily set phi_dot = 0
+        phi_dot = 0.
+
+        # make a grid in r, r_dot
+        _r = np.arange(10., 200., 0.5)
+        _r_dot = (np.arange(-600., 600., 15.)*u.km/u.s).decompose(usys).value
+        r,r_dot = np.meshgrid(_r,_r_dot)
+
+        # potential = LM10Potential(q1=1.4, q2=1., q3=0.8, phi=0.)
+        potential = PW14Potential()
+        r,r_dot,theta_dot = filter_grid(E, r.ravel(), r_dot.ravel(), phi, phi_dot, theta, potential)
+
+        # plot grid of ICs
+        # fig,ax = plt.subplots(1,1,figsize=(10,10))
+        # cax = ax.scatter(r, r_dot, marker='o', c=np.log(theta_dot))
+        # fig.colorbar(cax)
+        # fig.savefig(os.path.join(plot_path, "ic_grid_phi{}_theta{}.png".format(phi,theta)))
+
+        # turn the grid into an array of initial conditions
+        w0 = grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot)
+        logger.debug("Shape of ICs: {}".format(w0.shape))
+
+        # integrate all the ICs
+        integrator = si.LeapfrogIntegrator(lambda t, *args: potential.acceleration(*args))
+
+        # define initial conditions for Sgr orbit (x,y,z,vx,vy,vz)
+        a = time.time()
+        t,ws = integrator.run(w0, dt=1., nsteps=15000)
+        logger.debug("Took {} seconds to integrate.".format(time.time() - a))
+
+        np.save(fn, ws)
+    else:
+        ws = np.load(fn)
 
     orb = sd.classify_orbit(ws)
     is_loop = np.any(orb, axis=1).astype(bool)
@@ -109,7 +114,7 @@ def bork(angles):
     box_frac = is_box.sum() / float(len(is_loop))
     logger.info("Fraction of box orbits: {}".format(box_frac))
 
-    del ws, t, orb
+    del ws, orb
     gc.collect()
 
     return phi,theta,box_frac
@@ -138,10 +143,10 @@ def main(mpi=False):
 
     angles = []
     for t,p in zip(theta,phi):
-        fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(p,t))
-        if os.path.exists(fn):
-            logger.debug("'{}' exists...skipping".format(fn))
-            continue
+        #fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(p,t))
+        #if os.path.exists(fn):
+        #    logger.debug("'{}' exists...skipping".format(fn))
+        #    continue
         angles.append((p,t))
 
     box_fracs = pool.map(bork, angles)
