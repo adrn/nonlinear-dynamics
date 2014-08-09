@@ -6,6 +6,7 @@ __author__ = "adrn <adrn@astro.columbia.edu>"
 
 # Standard library
 import os, sys
+import gc
 import random
 random.seed(42)
 import time
@@ -25,8 +26,9 @@ import streamteam.dynamics as sd
 from streamteam.util import get_pool
 
 usys = (u.kpc, u.Myr, u.radian, u.Msun)
-plot_path = "output/planes"
-# plot_path = "/hpc/astrostats/astro/users/amp2217/planes"
+# plot_path = "output/planes"
+# plot_path = "/hotfoot/astrostats/astro/users/amp2217/planes"
+plot_path = "/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
 
 def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
 
@@ -106,6 +108,9 @@ def bork(angles):
     is_box = np.logical_not(is_loop)
     box_frac = is_box.sum() / float(len(is_loop))
     logger.info("Fraction of box orbits: {}".format(box_frac))
+
+    del ws, t, orb
+    gc.collect()
 
     return phi,theta,box_frac
 
