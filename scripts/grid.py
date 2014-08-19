@@ -104,18 +104,19 @@ def bork(angles):
         t,ws = integrator.run(w0, dt=1., nsteps=15000)
         logger.debug("Took {} seconds to integrate.".format(time.time() - a))
 
-        np.save(fn, ws)
+        orb = sd.classify_orbit(ws)
+        is_loop = np.any(orb, axis=1).astype(bool)
+        is_box = np.logical_not(is_loop)
+        logger.info("Fraction of box orbits: {}".format(box_frac))
+
+        del ws, orb
+        gc.collect()
+
+        np.save(fn, np.vstack(r, r_dot, is_box))
     else:
-        ws = np.load(fn)
+        r, r_dot, is_box = np.load(fn)
 
-    orb = sd.classify_orbit(ws)
-    is_loop = np.any(orb, axis=1).astype(bool)
-    is_box = np.logical_not(is_loop)
-    box_frac = is_box.sum() / float(len(is_loop))
-    logger.info("Fraction of box orbits: {}".format(box_frac))
-
-    del ws, orb
-    gc.collect()
+    box_frac = is_box.sum() / float(len(is_box))
 
     return phi,theta,box_frac
 
