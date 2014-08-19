@@ -26,9 +26,9 @@ import streamteam.dynamics as sd
 from streamteam.util import get_pool
 
 usys = (u.kpc, u.Myr, u.radian, u.Msun)
-# plot_path = "output/planes"
+plot_path = "output/planes"
 # plot_path = "/hotfoot/astrostats/astro/users/amp2217/planes"
-plot_path = "/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
+# plot_path = "/vega/astro/users/amp2217/projects/nonlinear-dynamics/output/planes"
 
 def filter_grid(E, r, r_dot, phi, phi_dot, theta, potential):
 
@@ -63,9 +63,13 @@ def grid_to_ics(r, r_dot, phi, phi_dot, theta, theta_dot):
 
 def bork(angles):
     phi,theta = angles
+    dr = 0.5
+    drdot = 15.
+    # For testing
+    # dr = 5.
+    # drdot = 100.
 
     fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
-
     if not os.path.exists(fn):
 
         # take energy from Sgr orbit
@@ -78,8 +82,8 @@ def bork(angles):
         phi_dot = 0.
 
         # make a grid in r, r_dot
-        _r = np.arange(10., 200., 0.5)
-        _r_dot = (np.arange(-600., 600., 15.)*u.km/u.s).decompose(usys).value
+        _r = np.arange(10., 200., dr)
+        _r_dot = (np.arange(-600., 600., drdot)*u.km/u.s).decompose(usys).value
         r,r_dot = np.meshgrid(_r,_r_dot)
 
         # potential = LM10Potential(q1=1.4, q2=1., q3=0.8, phi=0.)
@@ -107,27 +111,28 @@ def bork(angles):
         orb = sd.classify_orbit(ws)
         is_loop = np.any(orb, axis=1).astype(bool)
         is_box = np.logical_not(is_loop)
-        logger.info("Fraction of box orbits: {}".format(box_frac))
 
         del ws, orb
         gc.collect()
 
-        np.save(fn, np.vstack(r, r_dot, is_box))
+        np.save(fn, np.vstack((r, r_dot, is_box, w0.T)))
     else:
-        r, r_dot, is_box = np.load(fn)
+        r, r_dot, is_box, x, y, z, vx, vy, vz = np.load(fn)
 
+    is_box = is_box.astype(bool)
     box_frac = is_box.sum() / float(len(is_box))
-
-    return phi,theta,box_frac
+    logger.info("Fraction of box orbits: {}".format(box_frac))
 
     # plot grid of ICs, classified
-    # plt.figure(figsize=(12,12))
+    # plt.clf()
     # plt.scatter(r[is_box], r_dot[is_box], marker='s', c='#d7191c')
-    # plt.scatter(r[is_loop], r_dot[is_loop], marker='o',
-    #             facecolors='none', edgecolors='#1a9641')
+    # plt.scatter(r[np.logical_not(is_box)], r_dot[np.logical_not(is_box)],
+    #             marker='o', facecolors='none', edgecolors='#1a9641')
     # plt.xlim(r.min(),r.max())
     # plt.ylim(r_dot.min(),r_dot.max())
     # plt.savefig(os.path.join(plot_path, "phi{}_theta{}.png".format(phi,theta)))
+
+    return phi,theta,box_frac
 
 def main(mpi=False):
     pool = get_pool(mpi=mpi)
@@ -135,8 +140,11 @@ def main(mpi=False):
     if not os.path.exists(plot_path):
         os.makedirs(plot_path)
 
-    theta = np.arccos(1. - np.linspace(0.01,1.,15))
-    phi = np.linspace(0.01, 0.99*np.pi/2., 15)
+    ntheta = 15
+    nphi = 15
+
+    theta = np.arccos(1. - np.linspace(0.01, 1., ntheta))
+    phi = np.linspace(0.01, 0.99*np.pi/2., nphi)
 
     t,p = np.meshgrid(theta, phi)
     theta = t.ravel()
