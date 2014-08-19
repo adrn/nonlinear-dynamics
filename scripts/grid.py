@@ -105,11 +105,11 @@ def bork(angles):
 
         # define initial conditions for Sgr orbit (x,y,z,vx,vy,vz)
         a = time.time()
-        t,ws = integrator.run(w0, dt=1., nsteps=15000)
+        t,ws = integrator.run(w0, dt=2., nsteps=50000)
         logger.debug("Took {} seconds to integrate.".format(time.time() - a))
 
         orb = sd.classify_orbit(ws)
-        is_loop = np.any(orb, axis=1).astype(bool)
+        is_loop = np.any(orb.astype(bool), axis=1)
         is_box = np.logical_not(is_loop)
 
         del ws, orb
