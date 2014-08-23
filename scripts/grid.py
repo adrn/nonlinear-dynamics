@@ -72,17 +72,17 @@ def bork(angles):
     fn = os.path.join(plot_path, "phi{}_theta{}.npy".format(phi,theta))
     if not os.path.exists(fn):
 
-        # take energy from Sgr orbit
-        sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
-        sgr_pot = LM10Potential()
-        E = sgr_pot.value(sgr_w[:3]) + 0.5*np.sum(sgr_w[3:]**2)
-        E = -0.11150041
+        # # take energy from Sgr orbit
+        # sgr_w = np.array([19.0,2.7,-6.9,0.2352238,-0.03579493,0.19942887])
+        # sgr_pot = LM10Potential()
+        # E = sgr_pot.value(sgr_w[:3]) + 0.5*np.sum(sgr_w[3:]**2)
+        E = -0.1
 
         # arbitrarily set phi_dot = 0
         phi_dot = 0.
 
         # make a grid in r, r_dot
-        _r = np.arange(10., 200., dr)
+        _r = np.arange(1., 200., dr)
         _r_dot = (np.arange(-600., 600., drdot)*u.km/u.s).decompose(usys).value
         r,r_dot = np.meshgrid(_r,_r_dot)
 
@@ -105,7 +105,7 @@ def bork(angles):
 
         # define initial conditions for Sgr orbit (x,y,z,vx,vy,vz)
         a = time.time()
-        t,ws = integrator.run(w0, dt=2., nsteps=50000)
+        t,ws = integrator.run(w0, dt=2.5, nsteps=8000)
         logger.debug("Took {} seconds to integrate.".format(time.time() - a))
 
         orb = sd.classify_orbit(ws)
